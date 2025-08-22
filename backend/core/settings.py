@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -37,9 +37,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'ninja_extra',
     'corsheaders',
+    'ninja_jwt',
+    'main',
     'finance_viewer',
-    'designer'
+    'designer',
 ]
 
 MIDDLEWARE = [
@@ -47,7 +50,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -56,6 +59,16 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
 ]
+CORS_ALLOW_CREDENTIALS = True
+
+#CSRF_COOKIE_SAMESITE = 'Strict'
+#SESSION_COOKIE_SAMESITE = 'Strict'
+#CSRF_COOKIE_HTTPONLY = True
+#SESSION_COOKIE_HTTPONLY = True
+#CSRF_TRUSTED_ORIGINS = [
+#    'http://localhost:5173',
+#    'http://localhost:8000'
+#]
 
 ROOT_URLCONF = 'core.urls'
 
@@ -81,9 +94,16 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
+    #'default': {
+    #    'ENGINE': 'django.db.backends.sqlite3',
+    #    'NAME': BASE_DIR / 'db.sqlite3',
+    #}
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mfv_app',
+        'USER': 'mike',
+        'PASSWORD': 'postgres123',
+        'HOST': 'localhost'
     }
 }
 
@@ -105,6 +125,15 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+AUTH_USER_MODEL = 'main.CustomUser'
+
+#NINJA_JWT = {
+#    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+#    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+#    "ROTATE_REFRESH_TOKENS": True,
+#    "BLACKLIST_AFTER_ROTATION": True,
+#}
 
 
 # Internationalization
