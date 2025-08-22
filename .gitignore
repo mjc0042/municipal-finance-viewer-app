@@ -1,7 +1,13 @@
 .env
 
 *.lock
+*.log
 
 # Python files
 *.pyc
 __pycache__/
+
+# Django
+db.sqlite3
+local_settings.py
+static/
