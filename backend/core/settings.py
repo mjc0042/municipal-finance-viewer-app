@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'ninja_extra',
     'corsheaders',
     'ninja_jwt',
+    'django.contrib.gis',
     'main',
     'finance_viewer',
     'designer',
@@ -104,6 +105,22 @@ DATABASES = {
         'USER': 'mike',
         'PASSWORD': 'postgres123',
         'HOST': 'localhost'
+    },
+    'municipal_finance': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'municipal_finance_viewer',
+        'USER': 'mike',
+        'PASSWORD': 'postgres123',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    },
+    'gis_boundaries': {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': 'gis_boundaries',
+        'USER': 'mike',
+        'PASSWORD': 'postgres123',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 

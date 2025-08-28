@@ -60,9 +60,11 @@ def get_user(request):
     return {
         "id": request.user.id,
         "email": request.user.email,
-        "first_name": request.user.first_name,
-        "last_name": request.user.last_name,
-        "organization": request.user.organization
+        "firstName": request.user.first_name,
+        "lastName": request.user.last_name,
+        "organization": request.user.organization,
+        "subscriptionTier": request.user.subscription_tier,
+        "credits": 0 # TODO: Add functionality
     }
 
 
