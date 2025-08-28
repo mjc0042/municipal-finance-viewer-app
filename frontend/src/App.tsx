@@ -5,14 +5,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 //import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 //import { useAuth } from "@/hooks/useAuth";
-import { useAuthStore } from "./store/auth";
 //import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Register from "@/pages/register";
 import Login from "@/pages/login";
 import Finance from "@/pages/finance";
 import Designer from "@/pages/designer";
-//import Profile from "@/pages/profile";
+import Profile from "@/pages/profile";
 //import Subscribe from "@/pages/subscribe";
 import NotFound from "@/pages/not-found";
 /*
@@ -45,6 +44,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/finance" component={Finance} />
       <Route path="/designer" component={Designer} />
+      <Route path="/profile" component={Profile} />
       <Route component={NotFound} />
     </Switch>
   );

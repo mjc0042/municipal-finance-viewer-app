@@ -16,6 +16,7 @@ interface AuthStore {
   login: (email:string, password:string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
+  getUser: () => Promise<User>;
 }
 
 export const useAuthStore = create(
@@ -56,6 +57,22 @@ export const useAuthStore = create(
         } catch (error) {
           console.error('Token refresh failed:', error);
           get().logout();
+        }
+      },
+      getUser: async() => {
+
+        console.log("Fetching user...");
+        const { user } = get();
+        if (user) return user;
+
+        try {
+          const fetchedUser = await authApi.getCurrentUser();
+          set({ user: fetchedUser });
+          return fetchedUser;
+
+        } catch (error) {
+          console.error('Failed to fetch user:', error);
+          throw error;
         }
       }
     }),

@@ -6,15 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useAuth } from "@/hooks/useAuth";
+//import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
-import { GeneratedImage } from "@shared/schema";
+//import { GeneratedImage } from "@shared/schema";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 export default function Profile() {
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user)
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -22,22 +23,28 @@ export default function Profile() {
     firstName: "",
     lastName: "",
     email: "",
-    organization: ""
+    organization: "",
+    subscriptionTier: ""
   });
 
   // Load user data into form
   useEffect(() => {
+    console.log("user: ", user)
     if (user) {
       setFormData({
         firstName: user.firstName || "",
         lastName: user.lastName || "",
         email: user.email || "",
-        organization: "" // This would come from user profile if extended
+        organization: user.organization || "", // This would come from user profile if extended
+        subscriptionTier: user.subscriptionTier || "None",
       });
     }
   }, [user]);
 
-  const { data: userImages, isLoading: imagesLoading } = useQuery({
+const userImages = null;
+const imagesLoading = false;
+
+  /*const { data: userImages, isLoading: imagesLoading } = useQuery({
     queryKey: ["/api/user/images"],
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
@@ -52,7 +59,7 @@ export default function Profile() {
         return;
       }
     },
-  });
+  });*/
 
   const handleSaveProfile = async () => {
     // TODO: Implement profile update API
