@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useLocation } from 'wouter';
 import { apiClient } from '@/http/api';
 import { authApi } from '@/http/auth/api';
 import type { User } from '@/http/auth/types'
@@ -40,7 +41,8 @@ export const useAuthStore = create(
       logout: async () => {
         try {
           set({ user: null, isAuthenticated: false, tokens: { access: null, refresh: null } });
-          console.log("Logged out.")
+          // Redirect to home page
+          useLocation()[1]('/');
         } catch (error) {
           console.error('Logout failed:', error);
           throw error;
@@ -61,7 +63,6 @@ export const useAuthStore = create(
       },
       getUser: async() => {
 
-        console.log("Fetching user...");
         const { user } = get();
         if (user) return user;
 
