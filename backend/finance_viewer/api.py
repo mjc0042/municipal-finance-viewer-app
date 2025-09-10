@@ -1,140 +1,164 @@
 """ API calls for all financial viewer requests """
+#
 
 import datetime
 import json
+import uuid
 
 from decimal import Decimal
 from uuid import uuid4
 
 from django.core.serializers import serialize
+from django.db import connections
+from django.db.models import Q
+from django.db.models.functions import Substr
 from django.http import JsonResponse
 from ninja import Router
 from ninja_jwt.authentication import JWTAuth
 
-from .models import MunicipalBoundary, StateBoundary
+from .lib.state_utils import get_state_abreviation
+from .models.municipal_finance import Municipalities, MunicipalFinances
+from .models.gis_boundaries import MunicipalBoundaries, StateBoundaries
 from .schemas import MunicipalityFinance, MunicipalBoundaryResponse, StateBoundaryResponse
 
+from .fake_finance_modeller import generate_historic_financials
+
 router = Router()
-
-# Sample data for testing
-SAMPLE_FINANCIAL_DATA = {
-    "mid": uuid4(),
-        "year": 2025,
-
-        "current_assets": Decimal("1234567.89"),
-        "capital_assets": Decimal("2345678.90"),
-        "total_assets": Decimal("3580246.79"),
-        "deferred_outflows": Decimal("12345.67"),
-        "debt": Decimal("765432.10"),
-        "liabilities": Decimal("456789.12"),
-        "deferred_inflows": Decimal("23456.78"),
-        "total_revenues": Decimal("9876543.21"),
-        "operating_grants": Decimal("345678.90"),
-        "capital_grants": Decimal("456789.12"),
-        "interest_charges": Decimal("12345.67"),
-
-        "component_units": "Sample Component Units",
-
-        "government_assets_not_being_depreciated": Decimal("1000000.00"),
-        "government_assets_being_depreciated": Decimal("500000.00"),
-        "government_assets_other": Decimal("200000.00"),
-        "business_type_assets_not_being_depreciated_total": Decimal("150000.00"),
-        "business_type_assets_being_depreciated_total": Decimal("350000.00"),
-        "component_unit_assets_not_being_depreciated": Decimal("250000.00"),
-        "component_unit_assets_being_depreciated": Decimal("150000.00"),
-        "component_unit_assets_other": Decimal("100000.00"),
-
-        "net_book_total_capital_assets": Decimal("1750000.00"),
-
-        "de_general": Decimal("10000.00"),
-        "de_infrastructure": Decimal("15000.00"),
-        "de_public_safety": Decimal("12000.00"),
-        "de_health": Decimal("8000.00"),
-        "de_housing": Decimal("7000.00"),
-        "de_recreation": Decimal("6000.00"),
-        "de_utilities": Decimal("9000.00"),
-        "de_airport": Decimal("4000.00"),
-        "de_other": Decimal("3000.00"),
-
-        "taxable_assessed_value": Decimal("20000000.00"),
-        "property_taxes_levied": Decimal("1500000.00"),
-
-        "pension_bonds": Decimal("500000.00"),
-        "water_revenue_bonds": Decimal("300000.00"),
-        "total_utility_bonds": Decimal("200000.00"),
-        "airport_bonds": Decimal("250000.00"),
-        "debt_governmental_activities": Decimal("400000.00"),
-        "debt_business_activities": Decimal("350000.00"),
-        "debt_total_primary_government": Decimal("750000.00"),
-        "general_obligation_bonds": Decimal("600000.00"),
-        "population": Decimal("100000"),
-        "per_capita_income": Decimal("45000.00"),
-
-        "principal_employers": "Acme Corp, Beta LLC, Gamma Inc.",
-
-        "police_force": 200,
-        "fire_dept": 150,
-        "total_employees": 5000,
-        "street_repair_miles": Decimal("120.5"),
-        "water_main_breaks": 12,
-        "water_daily_pumpage_gallons_million": Decimal("50.5"),
-        "sewer_repairs": Decimal("700.25"),
-
-        "parks": 45,
-        "street_miles": Decimal("350.5"),
-        "sewer_miles": Decimal("600.5"),
-        "water_main_miles": Decimal("400.5"),
-
-        "modifier": "auto",
-        "created_at": datetime.datetime.now(),
-}
 
 @router.get("/gis/states", response=list[StateBoundaryResponse], auth=JWTAuth())
 def get_states(request):
     """ API call for retrieving state boundaries """
 
-    qs = StateBoundary.objects.using('gis_boundaries').all()
+    qs = StateBoundaries.objects.using('gis_boundaries').all()
     geojson = serialize("geojson", qs, geometry_field="geometry", fields=[
         "id", "statefp", "statens", "geoidfq", "geoid", "stusps", "name", "lsad", "aland", "awater"
     ])
     return JsonResponse(geojson, safe=False)
 
 @router.get("/gis/municipalities", response=list[MunicipalBoundaryResponse], auth=JWTAuth())
-def get_state_municipalities(request, state: str):
+def get_state_municipalities(request, state_name:str, state_abbr:str, state_code:str):
     """ API call for retrieving municipal boundaries for a state 
     
         Args:
-            state (str): State Abbreviation i.e. CA
+            state_name (str): State Name
+            state_abbr (str): 2-letter State Abbreviation i.e. CA
+            state_code (str): 2-digit state FIPS code
     """
+    print("HERe1")
+    # TODO: Optimize DB query
+     # Get state abbreviation
+    state_lookup = state_abbr if len(state_abbr) <= 2 else get_state_abreviation(state_name)
+    if state_lookup is None:
+        return JsonResponse({"success": False, "message": "State not available"}, status=500)
+    print("Here2")
 
-    qs = MunicipalBoundary.objects.using('gis_boundaries').filter(state=state.upper())
-    geojson = serialize("geojson", qs, geometry_field="geometry",
-        fields=[
-            "id",
-            "municipal_name",
-            "municipal_code",
-            "municipal_type",
-            "county_name",
-            "state",
-            "gnis_id",
-            "fips_code",
-            "fips_name",
-            "pop_1990",
-            "pop_2000",
-            "pop_2010",
-            "pop_2020",
-            "sq_mi"
-        ]
-    )
-    return JsonResponse(json.loads(geojson), safe=False)
+    # Get state-county FIPS, name and mid for the available municipalities
+    available_munis_qs = Municipalities.objects.using('municipal_finance').filter(
+        state=state_lookup.upper()
+    ).values_list('county_fips', 'name', 'mid')
+    muni_lookup = {(county_fips, name): mid for county_fips, name, mid in available_munis_qs}
 
-@router.get("/municipality/finances", response=MunicipalityFinance, auth=JWTAuth())
-def get_municipality_finances(request, name:str, state:str):
+    print(muni_lookup)
+
+    # Create filter conditions
+    condition1 = Q(state=state_lookup.upper())
+    condition2 = Q()
+    for county_fips, name, _ in available_munis_qs:
+        condition2 |= Q(county_fips5=county_fips, municipal_name=name)
+
+    # Query boundaries using combined conditions
+    qs = MunicipalBoundaries.objects.using('gis_boundaries').annotate(
+        county_fips5=Substr('fips_code', 1, 5)
+    ).filter(condition1 & condition2)
+
+    # Serialize boundaries
+    geojson = serialize("geojson", qs, geometry_field="geometry", fields=[
+        "id",
+        "municipal_name",
+        "municipal_code",
+        "municipal_type",
+        "county_name",
+        "state",
+        "gnis_id",
+        "fips_code",
+        "fips_name",
+        "pop_1990",
+        "pop_2000",
+        "pop_2010",
+        "pop_2020",
+        "sq_mi"
+    ])
+    data = json.loads(geojson)
+
+    # Attach the correct mid to each feature record
+    for feature in data['features']:
+        props = feature['properties']
+        county_fips5 = props.get('county_fips', '')[:5] or props.get('fips_code', '')[:5]
+        mun_name = props['municipal_name']
+        mid = muni_lookup.get((county_fips5, mun_name))
+        props['mid'] = mid
+
+    return JsonResponse(data, safe=False, status=200)
+
+@router.get("/municipality/finances", response=list[MunicipalityFinance], auth=JWTAuth())
+def get_municipality_finances(request, mid:str):
     """Get financial data for a municipality"""
-    # For now, return sample data
-    return SAMPLE_FINANCIAL_DATA
 
-@router.post("/init-sample-data")
-def init_sample_data(request):
-    """Initialize sample data"""
-    return {"message": "Sample data initialized"}
+    # For now, return sample data
+    #return generate_historic_financials()
+
+    qs = MunicipalFinances.objects.using('municipal_finance').filter(mid=mid)
+    data = list(qs.values()) #serialize('json', qs)
+    return JsonResponse(data, safe=False, status=200)
+
+
+@router.post("/municipality/finances/add/year")
+def add_municipality_yearly_finances(request):
+    """ API call for adding finances for a municipality """
+
+    data = json.loads(request.body)
+    municipality_name = data.pop("municipality_name", None)
+    state = data.pop("state", None)
+    state_abbr = get_state_abreviation(state)
+    county_fips = data.pop("county_fips", None)
+    year = data.get("year")
+
+    if not all([municipality_name, state_abbr, county_fips, year]):
+        return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
+
+    with connections['municipal_finances'].cursor() as cursor:
+        # Check if municipality exists
+        cursor.execute("""
+            SELECT mid FROM municipalities
+            WHERE name = %s AND state = %s AND county_fips = %s
+        """, [municipality_name, state_abbr, county_fips])
+        row = cursor.fetchone()
+
+    if row:
+        mid = row[0]
+
+        # Check if finance record for that year exists
+        exists = MunicipalFinances.objects.filter(mid=mid, year=year).exists()
+
+        if exists:
+            return JsonResponse({"success": False, "error": "Record for municipality and year already exists"}, status=400)
+
+    else:
+        # Municipality does not exist, create new mid and insert municipality
+        mid = str(uuid.uuid5(uuid.NAMESPACE_URL, state_abbr + municipality_name))
+
+        with connections['municipal_finances'].cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO municipalities (mid, name, state, county_fips)
+                VALUES (%s, %s, %s, %s)
+            """, [mid, municipality_name, state_abbr, county_fips])
+
+    # Now create the MunicipalFinanceRecord entry
+    # Add mid to data to associate finance record with municipality
+    data["mid"] = mid
+    data["modifier"] = "user"
+
+    # Create new finance record
+    record = MunicipalFinances.objects.create(**data)
+
+    return JsonResponse({"success": True, "message": "Record created successfully"}, status=200)

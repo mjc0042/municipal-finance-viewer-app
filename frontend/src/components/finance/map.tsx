@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Municipality } from "@shared/schema";
+import type { MunicipalBoundaryCollection, MunicipalFeature } from '@/http/financial/types/gis';
+import type { MunicipalityFinance } from "@/http/financial/types/types";
+import { useFullFinanceStore } from "@/store/finance";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { financialApi } from "@/http/financial/api";
 
 // Fix for default markers in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -15,25 +18,35 @@ L.Icon.Default.mergeOptions({
 });
 
 interface FinanceMapProps {
-  selectedMunicipality: Municipality | null;
-  setSelectedMunicipality: (municipality: Municipality | null) => void;
-  searchQuery: string;
+  municipalBoundaries: MunicipalBoundaryCollection | null;
+  selectedMunicipalityFinances: MunicipalityFinance | null;
+  selectedMunicipalityFeature: MunicipalFeature | null;
+  setSelectedMunicipality: (id: number, mid: string) => void;
   colorBy: string;
 }
 
-export default function FinanceMap({ 
-  selectedMunicipality, 
-  setSelectedMunicipality, 
-  searchQuery,
+export default function FinanceMap({
+  municipalBoundaries,
+  selectedMunicipalityFinances: finData,
+  selectedMunicipalityFeature,
+  setSelectedMunicipality,
   colorBy 
 }: FinanceMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<L.CircleMarker[]>([]);
+  const stateLayerRef = useRef<L.GeoJSON | null>(null);
+  const municipalityLayersRef = useRef<L.LayerGroup | null>(null);
 
-  const { data: municipalities = [], isLoading } = useQuery({
-    queryKey: ["/api/municipalities", { search: searchQuery }],
-  });
+  //const { data: stateBoundaries, isLoading: statesLoading } = useQuery({
+  //  queryKey: ['states-boundaries'],
+  //  queryFn: () => financialApi.getStateBoundaries(),
+  //});
+
+  //const { data: municipalities = [], isLoading: municipalitiesLoading } = useQuery({
+  //  queryKey: ['municipalities', selectedState],
+  //  queryFn: () => financialApi.getMunicipalBoundaries(selectedState!),
+  //  enabled: !!selectedState,
+  //});
 
   // Initialize map
   useEffect(() => {
@@ -46,6 +59,7 @@ export default function FinanceMap({
     }).addTo(map);
 
     mapInstanceRef.current = map;
+    municipalityLayersRef.current = L.layerGroup().addTo(map);
 
     return () => {
       if (mapInstanceRef.current) {
@@ -55,55 +69,98 @@ export default function FinanceMap({
     };
   }, []);
 
+  // Add state boundaries
+  /*useEffect(() => {
+    if (!mapInstanceRef.current || !stateBoundaries || statesLoading) return;
+
+    if (stateLayerRef.current) {
+      stateLayerRef.current.remove();
+    }
+
+    stateLayerRef.current = L.geoJSON(stateBoundaries, {
+      style: (feature) => ({
+        color: '#3c6e71',
+        weight: 2,
+        fillOpacity: 0.1,
+        fillColor: '#3c6e71'
+      }),
+      onEachFeature: (feature, layer) => {
+        layer.on('click', () => {
+          const stateCode = feature.properties.STATE;
+          setSelectedState(stateCode);
+          
+          // Zoom to state bounds
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.fitBounds(layer.getBounds());
+          }
+        });
+      }
+    }).addTo(mapInstanceRef.current);
+  }, [stateBoundaries, statesLoading]);*/
+
   // Update markers when data changes
   useEffect(() => {
-    if (!mapInstanceRef.current || !municipalities.length) return;
-
-    // Clear existing markers
-    markersRef.current.forEach(marker => {
-      mapInstanceRef.current?.removeLayer(marker);
-    });
-    markersRef.current = [];
-
-    // Add new markers
-    municipalities.forEach((municipality: Municipality) => {
-      if (!municipality.latitude || !municipality.longitude) return;
-
-      const lat = parseFloat(municipality.latitude);
-      const lng = parseFloat(municipality.longitude);
-      
-      // Get color based on colorBy property
-      const color = getMarkerColor(municipality, colorBy);
-      
-      const marker = L.circleMarker([lat, lng], {
-        radius: 8,
-        fillColor: color,
-        color: 'white',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.8
+    if (!mapInstanceRef.current || !municipalBoundaries?.features.length) return;
+  
+    if (municipalityLayersRef.current) {
+      municipalityLayersRef.current.clearLayers();
+    }
+  
+    const layers = [];
+  
+    municipalBoundaries.features.forEach((boundary) => {
+      if (!boundary.geometry) return;
+  
+      const layer = L.geoJSON(boundary.geometry, {
+        style: () => ({
+          color: '#3c6e71',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.3
+        })
       });
-
-      marker.on('click', () => {
-        setSelectedMunicipality(municipality);
+  
+      layer.on('click', () => {
+        setSelectedMunicipality(boundary.properties.id, boundary.properties.mid);
       });
-
-      marker.addTo(mapInstanceRef.current!);
-      markersRef.current.push(marker);
+  
+      layer.bindPopup(boundary.properties.municipal_name);
+      layer.addTo(municipalityLayersRef.current!);
+      layers.push(layer);
     });
-  }, [municipalities, colorBy, setSelectedMunicipality]);
+  
+    // --- Fit to all polygons
+    if (layers.length > 0) {
+      // Collect all bounds and combine
+      const group = L.featureGroup(layers);
+      mapInstanceRef.current.fitBounds(group.getBounds(), { padding: [20, 20] });
+    }
+  }, [municipalBoundaries, colorBy, setSelectedMunicipality]);
 
-  const getMarkerColor = (municipality: Municipality, colorBy: string): string => {
+  // Zoom to selected municipality
+  useEffect(() => {
+    if (
+      mapInstanceRef.current &&
+      selectedMunicipalityFeature &&
+      selectedMunicipalityFeature.geometry
+    ) {
+      const layer = L.geoJSON(selectedMunicipalityFeature.geometry);
+      mapInstanceRef.current.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: 13 });
+    }
+  }, [selectedMunicipalityFeature]);
+
+  const getMarkerColor = (municipality: MunicipalityFinance, colorBy: string): string => {
     let value = 0;
     
+    // TODO: fix
     switch (colorBy) {
-      case 'revenuePerAcre':
-        value = municipality.revenuePerAcre ? parseFloat(municipality.revenuePerAcre) : 0;
+      case 'total_revenues':
+        value = municipality.total_revenues ? municipality.total_revenues : 0;
         if (value > 25000) return '#22c55e'; // green
         if (value > 15000) return '#eab308'; // yellow
         return '#ef4444'; // red
-      case 'debtToRevenue':
-        value = municipality.debtToRevenue ? parseFloat(municipality.debtToRevenue) : 0;
+      case 'debt':
+        value = municipality.debt ? municipality.debt : 0;
         if (value < 20) return '#22c55e'; // green - low debt is good
         if (value < 30) return '#eab308'; // yellow
         return '#ef4444'; // red - high debt is concerning
@@ -123,9 +180,9 @@ export default function FinanceMap({
     }
   };
 
-  const formatCurrency = (value: string | null): string => {
+  const formatCurrency = (value: number | null): string => {
     if (!value) return '$0';
-    const num = parseFloat(value);
+    const num = value;
     if (num >= 1e9) return `$${(num / 1e9).toFixed(1)}B`;
     if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
     if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
@@ -137,16 +194,16 @@ export default function FinanceMap({
     return value.toLocaleString();
   };
 
-  if (isLoading) {
+  /*if (municipalBoundaries === null || municipalBoundaries.features.length === 0) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading municipalities...</p>
+          <p className="text-gray-600">Loading map data...</p>
         </div>
       </div>
     );
-  }
+  }*/
 
   return (
     <div className="relative w-full h-full">
@@ -180,34 +237,25 @@ export default function FinanceMap({
       </div>
 
       {/* Municipality Info Panel */}
-      {selectedMunicipality && (
+      {selectedMunicipalityFeature && finData && (
         <Card className="absolute bottom-4 left-4 max-w-sm z-10">
           <CardContent className="p-4">
             <h4 className="font-semibold text-charcoal mb-2">
-              {selectedMunicipality.name}, {selectedMunicipality.state}
+              {selectedMunicipalityFeature.properties.municipal_name}, {selectedMunicipalityFeature.properties.state}
             </h4>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Population:</span>
-                <span>{formatNumber(selectedMunicipality.population)}</span>
+                <span>{formatNumber(finData.population)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Revenue:</span>
-                <span>{formatCurrency(selectedMunicipality.totalRevenue)}</span>
+                <span>{formatCurrency(finData.total_revenues)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Revenue/Acre:</span>
-                <span className="text-teal font-medium">
-                  {formatCurrency(selectedMunicipality.revenuePerAcre)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Debt Ratio:</span>
+                <span className="text-gray-600">Debt:</span>
                 <span>
-                  {selectedMunicipality.debtToRevenue ? 
-                    `${parseFloat(selectedMunicipality.debtToRevenue).toFixed(1)}%` : 
-                    'N/A'
-                  }
+                  {finData.debt ? `${finData.debt}%` : 'N/A'}
                 </span>
               </div>
             </div>
@@ -216,7 +264,7 @@ export default function FinanceMap({
               className="mt-3 w-full bg-teal hover:bg-teal/90 text-white"
               onClick={() => {
                 // TODO: Navigate to detailed view
-                console.log('View details for:', selectedMunicipality.name);
+                console.log('View details for:', selectedMunicipalityFeature.properties.municipal_name);
               }}
             >
               View Details

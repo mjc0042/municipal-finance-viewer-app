@@ -52,7 +52,7 @@ export interface MunicipalityFinance {
   population: number;
   per_capita_income: number;
 
-  principal_employers?: string;
+  principal_employers: string;
 
   police_force: number;
   fire_dept: number;
@@ -69,9 +69,4 @@ export interface MunicipalityFinance {
 
   modifier: string;
   created_at: string; // ISO timestamp
-}
-
-export interface MunicipalityFinanceParams {
-  name: string;
-  state: string;
 }

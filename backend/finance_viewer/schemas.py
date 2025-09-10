@@ -37,6 +37,7 @@ class MunicipalBoundaryResponse(Schema):
     pop_2010: Optional[int]
     pop_2020: Optional[int]
     sq_mi: Optional[float]
+    mid: UUID
 
 class MunicipalityFinance(Schema):
     mid: UUID

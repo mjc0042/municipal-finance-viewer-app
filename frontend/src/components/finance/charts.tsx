@@ -1,227 +1,142 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download, GitCompare } from "lucide-react";
-import { Municipality } from "@shared/schema";
-import * as echarts from "echarts";
+import type { MunicipalityFinance } from "@/http/financial/types/types";
+import LineChart from "@/components/finance/linechart";
 
 interface FinanceChartsProps {
-  selectedMunicipality: Municipality | null;
+  selectedMunicipalityFinances: MunicipalityFinance[] | null;
+  name: string | undefined;
+  state: string | undefined;
 }
 
-export default function FinanceCharts({ selectedMunicipality }: FinanceChartsProps) {
-  const assetsChartRef = useRef<HTMLDivElement>(null);
-  const revenueChartRef = useRef<HTMLDivElement>(null);
-  const debtChartRef = useRef<HTMLDivElement>(null);
-  
-  const assetsChartInstance = useRef<echarts.ECharts | null>(null);
-  const revenueChartInstance = useRef<echarts.ECharts | null>(null);
-  const debtChartInstance = useRef<echarts.ECharts | null>(null);
+interface ChartData {
+  years: number[];
+  netPositionData: number[];
+  financialAssetsLiabilitiesData: number[];
+  totalAssetsLiabilitiesData: number[];
+  debtRevenueData: number[];
+  interestRevenueData: number[];
+  bookValueCapitalAssets: number[];
+  govTransfersRevData: number[];
+}
 
-  // Initialize charts
-  useEffect(() => {
-    if (assetsChartRef.current && !assetsChartInstance.current) {
-      assetsChartInstance.current = echarts.init(assetsChartRef.current);
-    }
-    if (revenueChartRef.current && !revenueChartInstance.current) {
-      revenueChartInstance.current = echarts.init(revenueChartRef.current);
-    }
-    if (debtChartRef.current && !debtChartInstance.current) {
-      debtChartInstance.current = echarts.init(debtChartRef.current);
-    }
+export default function FinanceCharts({ 
+  selectedMunicipalityFinances: finances, name, state }: FinanceChartsProps) {
 
-    // Cleanup function
-    return () => {
-      assetsChartInstance.current?.dispose();
-      revenueChartInstance.current?.dispose();
-      debtChartInstance.current?.dispose();
-      assetsChartInstance.current = null;
-      revenueChartInstance.current = null;
-      debtChartInstance.current = null;
-    };
-  }, []);
+    const [chartData, setChartData] = useState<ChartData>({
+      years: [],
+      netPositionData: [],
+      financialAssetsLiabilitiesData: [],
+      totalAssetsLiabilitiesData: [],
+      debtRevenueData: [],
+      interestRevenueData: [],
+      bookValueCapitalAssets: [],
+      govTransfersRevData: []
+    });
 
   // Update charts when municipality changes
   useEffect(() => {
-    if (!selectedMunicipality) {
+    if (!finances || finances.length === 0) {
       // Show default/placeholder charts
-      updateAssetsChart(null);
-      updateRevenueChart(null);
-      updateDebtChart(null);
+      updateCharts(null);
       return;
     }
 
-    updateAssetsChart(selectedMunicipality);
-    updateRevenueChart(selectedMunicipality);
-    updateDebtChart(selectedMunicipality);
-  }, [selectedMunicipality]);
+    updateCharts(finances);
+  }, [finances]);
 
-  // Handle window resize
-  useEffect(() => {
-    const handleResize = () => {
-      assetsChartInstance.current?.resize();
-      revenueChartInstance.current?.resize();
-      debtChartInstance.current?.resize();
-    };
+  // Element-wise subtraction of arrays
+  const subtractArrays = (a: number[], b: number[]): number[] =>
+    a.map((val, i) => val - (b[i] ?? 0));
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  // Element-wise addition of arrays
+  const addArrays = (a: number[], b: number[]): number[] =>
+    a.map((val, i) => val + (b[i] ?? 0));
+  
+  // Element-wise division of arrays
+  const divideArrays = function (numArr:number[], denArr:number[]) {
+    if (!numArr || !denArr || numArr.length !== denArr.length) {
+      throw new Error("Arrays must be defined and have the same length");
+    }
+    return numArr.map((num:number, i:number) => {
+      if (denArr[i] === 0) {
+        return 0;
+      }
+      return num / denArr[i];
+    });
+  }
 
-  const updateAssetsChart = (municipality: Municipality | null) => {
-    if (!assetsChartInstance.current) return;
+  // Assets over time as a line chart
+  const updateCharts = (finances: MunicipalityFinance[] | null) => {
 
-    const currentAssets = municipality?.currentAssets ? parseFloat(municipality.currentAssets) / 1e9 : 8.2;
-    const totalLiabilities = municipality?.totalLiabilities ? parseFloat(municipality.totalLiabilities) / 1e9 : 3.1;
+    if (!finances || finances.length === 0) return;
 
-    const option = {
-      title: { 
-        text: 'Assets vs Liabilities', 
-        textStyle: { fontSize: 12, color: '#353535' } 
-      },
-      tooltip: { 
-        trigger: 'item',
-        formatter: '{a} <br/>{b}: ${c}B ({d}%)'
-      },
-      series: [{
-        name: 'Financial Position',
-        type: 'pie',
-        radius: '70%',
-        data: [
-          { value: currentAssets, name: 'Current Assets' },
-          { value: totalLiabilities, name: 'Total Liabilities' }
-        ],
-        itemStyle: {
-          color: function(params: any) {
-            return params.dataIndex === 0 ? '#3c6e71' : '#ee6c4d';
-          }
-        }
-      }]
-    };
+    const sorted = [...finances].sort((a, b) => a.year - b.year);
+    const years = sorted.map((f) => f.year);
 
-    assetsChartInstance.current.setOption(option);
-  };
+    const currentAssets = sorted.map((f) => Number(f.current_assets) || 0);
+    const liabilities = sorted.map((f) => Number(f.liabilities) || 0);
+    const deferredInflows = sorted.map((f) => Number(f.deferred_inflows) || 0);
+    const totalLiabilities = addArrays(liabilities, deferredInflows);
+    const totalRevenues = sorted.map((f) => Number(f.total_revenues) || 0);
 
-  const updateRevenueChart = (municipality: Municipality | null) => {
-    if (!revenueChartInstance.current) return;
+    // netPositionData = current assets - total liabilities
+    const netPositionData = subtractArrays(currentAssets, totalLiabilities);
 
-    // Generate mock historical data based on current revenue
-    const currentRevenue = municipality?.totalRevenue ? parseFloat(municipality.totalRevenue) / 1e9 : 13.2;
-    const historicalData = [
-      currentRevenue * 0.85,
-      currentRevenue * 0.82,
-      currentRevenue * 0.92,
-      currentRevenue * 0.97,
-      currentRevenue
-    ];
+    // financialAssetsLiabilitiesData = current_assets / total liabilities (avoid zero div)
+    const financialAssetsLiabilitiesData = divideArrays(currentAssets, totalLiabilities);
 
-    const option = {
-      title: { 
-        text: 'Revenue Trends', 
-        textStyle: { fontSize: 12, color: '#353535' } 
-      },
-      tooltip: {
-        trigger: 'axis',
-        formatter: 'Revenue: ${c}B'
-      },
-      xAxis: { 
-        type: 'category', 
-        data: ['2019', '2020', '2021', '2022', '2023'],
-        axisLine: { lineStyle: { color: '#d9d9d9' } },
-        axisLabel: { color: '#666' }
-      },
-      yAxis: { 
-        type: 'value',
-        axisLine: { lineStyle: { color: '#d9d9d9' } },
-        axisLabel: { 
-          color: '#666',
-          formatter: '${value}B'
-        }
-      },
-      series: [{
-        data: historicalData,
-        type: 'line',
-        smooth: true,
-        itemStyle: { color: '#3c6e71' },
-        lineStyle: { color: '#3c6e71', width: 3 },
-        areaStyle: { 
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(60, 110, 113, 0.3)' },
-              { offset: 1, color: 'rgba(60, 110, 113, 0.05)' }
-            ]
-          }
-        }
-      }]
-    };
+    // totalAssetsLiabilitiesData = (total assets + deferred outflows) / total liabilities
+    const totalAssets = sorted.map((f) => (Number(f.total_assets) || 0) / 1e9);
+    const deferredOutflows = sorted.map((f) => (Number(f.deferred_outflows) || 0) / 1e9);
+    const totalAssetsPlusOutflows = addArrays(totalAssets, deferredOutflows);
+    const totalAssetsLiabilitiesData = divideArrays(totalAssetsPlusOutflows, totalLiabilities);
 
-    revenueChartInstance.current.setOption(option);
-  };
+    // debtRevenueData = if netPosition < 0 then netPosition / total revenues else 0
+    const debtRevenueData = netPositionData.map((val, i) =>
+      val < 0 && totalRevenues[i] !== 0 ? val / totalRevenues[i] : 0
+    );
+    
+    // interestRevenueData = interest charges / total revenues
+    const interestCharges = sorted.map((f) => Number(f.interest_charges) || 0);
+    const interestRevenueData = divideArrays(interestCharges, totalRevenues);
 
-  const updateDebtChart = (municipality: Municipality | null) => {
-    if (!debtChartInstance.current) return;
+    // Total cost of capital Assets
+    const govAssetsNotDep = sorted.map((f) => Number(f.government_assets_not_being_depreciated) || 0);
+    const govAssetsDep = sorted.map((f) => Number(f.government_assets_being_depreciated) || 0);
+    const govAssetsOther = sorted.map((f) => Number(f.government_assets_other) || 0);
+    const busAssetsNotDep = sorted.map((f) => Number(f.business_type_assets_not_being_depreciated_total) || 0);
+    const busAssetsDep = sorted.map((f) => Number(f.business_type_assets_being_depreciated_total) || 0);
+    const totalCostCapitalAssets = addArrays(
+      addArrays(
+        addArrays(govAssetsNotDep, govAssetsDep),
+        addArrays(govAssetsOther, busAssetsNotDep)
+      ),
+      busAssetsDep
+    );
 
-    const debtRatio = municipality?.debtToRevenue ? parseFloat(municipality.debtToRevenue) : 23.5;
+    // bookValueCapitalAssets = capital assets / total cost of capital assets
+    const capitalAssets = sorted.map((f) => Number(f.capital_assets) || 0);
+    const bookValueCapitalAssets = divideArrays(capitalAssets, totalCostCapitalAssets);
 
-    const option = {
-      title: { 
-        text: 'Debt to Revenue', 
-        textStyle: { fontSize: 12, color: '#353535' } 
-      },
-      tooltip: { 
-        trigger: 'item',
-        formatter: 'Debt Ratio: {c}%'
-      },
-      series: [{
-        type: 'gauge',
-        radius: '80%',
-        data: [{ value: debtRatio, name: 'Debt Ratio %' }],
-        detail: { 
-          fontSize: 16,
-          color: '#353535',
-          formatter: '{value}%'
-        },
-        axisLine: {
-          lineStyle: {
-            color: [
-              [0.3, '#3c6e71'], // Good (green-teal)
-              [0.7, '#f4d03f'], // Caution (yellow)
-              [1, '#ee6c4d']    // High (orange-red)
-            ],
-            width: 20
-          }
-        },
-        pointer: {
-          itemStyle: {
-            color: '#353535'
-          }
-        },
-        axisTick: {
-          distance: -30,
-          length: 8,
-          lineStyle: {
-            color: '#fff',
-            width: 2
-          }
-        },
-        splitLine: {
-          distance: -30,
-          length: 30,
-          lineStyle: {
-            color: '#fff',
-            width: 4
-          }
-        },
-        axisLabel: {
-          color: 'inherit',
-          distance: 40,
-          fontSize: 10
-        }
-      }]
-    };
-
-    debtChartInstance.current.setOption(option);
+    // govTransfersRevData = total govt transfers / total revenues
+    const operatingGrants = sorted.map((f) => Number(f.operating_grants) || 0);
+    const capitalGrants = sorted.map((f) => Number(f.capital_grants) || 0);
+    const totalGovernmentTransfers = addArrays(operatingGrants, capitalGrants);
+    const govTransfersRevData = divideArrays(totalGovernmentTransfers, totalRevenues);
+    
+    // Update all chart data at once
+    setChartData({
+      years,
+      netPositionData,
+      financialAssetsLiabilitiesData,
+      totalAssetsLiabilitiesData,
+      debtRevenueData,
+      interestRevenueData,
+      bookValueCapitalAssets,
+      govTransfersRevData
+    });
   };
 
   const handleDownload = () => {
@@ -229,37 +144,14 @@ export default function FinanceCharts({ selectedMunicipality }: FinanceChartsPro
     console.log('Downloading charts...');
   };
 
-  const handleCompare = () => {
-    // TODO: Implement municipality comparison
-    console.log('Opening comparison view...');
-  };
-
   return (
-    <div className="p-4 h-full">
+    <div className="relative w-full h-full bg-white/90 p-3 max-w-lg mx-auto">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-charcoal">
-          Financial Metrics - {' '}
-          <span className="text-teal">
-            {selectedMunicipality ? 
-              `${selectedMunicipality.name}, ${selectedMunicipality.state}` : 
-              'Select a Municipality'
-            }
-          </span>
-        </h3>
         <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleCompare}
-            className="text-sm"
-          >
-            <GitCompare className="h-4 w-4 mr-1" />
-            Compare
-          </Button>
           <Button 
             size="sm"
             onClick={handleDownload}
-            className="bg-urban-orange hover:bg-urban-orange/90 text-sm"
+            className="text-sm border text-gray-200"
           >
             <Download className="h-4 w-4 mr-1" />
             Download
@@ -267,15 +159,27 @@ export default function FinanceCharts({ selectedMunicipality }: FinanceChartsPro
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-56">
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div ref={assetsChartRef} className="w-full h-full chart-container" />
+      <div className="">
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.netPositionData} title="Net Financial Position" />
         </div>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div ref={revenueChartRef} className="w-full h-full chart-container" />
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.financialAssetsLiabilitiesData} title="Financial Assets to Liabilities" />
         </div>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div ref={debtChartRef} className="w-full h-full chart-container" />
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.totalAssetsLiabilitiesData} title="Total Assets to Liabilities" />
+        </div>
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.debtRevenueData} title="Debt to Revenue" />
+        </div>
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.interestRevenueData} title="Interest to Revenue" />
+        </div>
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.bookValueCapitalAssets} title="Net Book Value to Cost of Capital Assets" />
+        </div>
+        <div className="w-full h-64">
+          <LineChart xDataSeries={chartData.years} yDataSeries={chartData.govTransfersRevData} title="Government Transfers to Revenue" />
         </div>
       </div>
     </div>

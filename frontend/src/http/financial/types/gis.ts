@@ -14,7 +14,7 @@ export interface StateBoundary {
     geometry: GeoJSON;
 }
 
-export interface MunicipalBoundary {
+export interface MunicipalInfo {
     id: number;
     municipal_name: string;
     municipal_code: string;
@@ -29,5 +29,17 @@ export interface MunicipalBoundary {
     pop_2010: string;
     pop_2020: string;
     sq_mi: string;
+    mid: string;
     geometry: GeoJSON;
+}
+
+export interface MunicipalFeature extends GeoJSON.Feature {
+    id: number;
+    properties: MunicipalInfo;
+    geometry: GeoJSON.Geometry;
+}
+
+export interface MunicipalBoundaryCollection extends GeoJSON.FeatureCollection {
+    type: 'FeatureCollection';
+    features: MunicipalFeature[];
 }

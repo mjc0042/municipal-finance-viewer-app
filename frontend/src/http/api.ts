@@ -11,8 +11,7 @@ export const apiClient = axios.create({
 });
 
 // Request interceptor to add access token to headers
-apiClient.interceptors.request.use(
-  (config:InternalAxiosRequestConfig) => {
+apiClient.interceptors.request.use((config:InternalAxiosRequestConfig) => {
     const tokens = useAuthStore.getState().tokens;
     if (tokens?.access && config.headers) {
       config.headers.Authorization = `Bearer ${tokens.access}`;
