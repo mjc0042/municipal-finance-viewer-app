@@ -4,83 +4,60 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Download, Save, Sparkles, Lock } from "lucide-react";
-import { CrossSectionPanel } from "@/pages/designer";
+import type { CrossSectionPanel } from "@/lib/designerUtils";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+//import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { designerApi } from "@/http/design/api";
+import type { GeneratedImage } from "@/http/design/types";
+import { useAuthStore } from "@/store/auth";
 
 interface ImageGeneratorProps {
   panels: CrossSectionPanel[];
+  units: string;
   selectedTheme: string;
   setSelectedTheme: (theme: string) => void;
 }
 
 export default function ImageGenerator({ 
   panels, 
+  units,
   selectedTheme, 
   setSelectedTheme 
 }: ImageGeneratorProps) {
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+
+  
+
+  const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const user = useAuthStore().getUser();
+  //const { toast } = useToast();
+  //const queryClient = useQueryClient();
 
   const generateImageMutation = useMutation({
     mutationFn: async () => {
-      const prompt = `Urban street cross-section with ${panels.map(p => 
-        `${p.width}ft ${p.name.toLowerCase()} (${p.material})`
-      ).join(', ')}. Professional urban planning visualization.`;
+      //const prompt = `Urban street cross-section with ${panels.map(p => 
+      //  `${p.width}ft ${p.name.toLowerCase()} (${p.material})`
+      //).join(', ')}. Professional urban planning visualization.`;
       
-      const response = await apiRequest("POST", "/api/generate-image", {
-        prompt,
-        theme: selectedTheme,
-        panels: panels
-      });
+      const resData = await designerApi.generateCrossSectionImage(
+        units,
+        selectedTheme,
+        panels
+      );
       
-      return await response.json();
+      return await resData;
     },
     onSuccess: (data) => {
       setGeneratedImage(data.image.imageUrl);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      toast({
-        title: "Image Generated!",
-        description: `Credits remaining: ${data.creditsRemaining}`
-      });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-      
-      toast({
-        title: "Generation Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      console.log("Generation failed", error);
     },
   });
 
   const handleGenerate = () => {
-    if (!user || user.credits <= 0) {
-      toast({
-        title: "Insufficient Credits",
-        description: "You need credits to generate images. Please upgrade your plan.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     generateImageMutation.mutate();
   };
 
@@ -88,17 +65,20 @@ export default function ImageGenerator({
     if (!generatedImage) return;
     
     const link = document.createElement('a');
-    link.href = generatedImage;
+    link.href = generatedImage.imageUrl;
     link.download = `urban-cross-section-${Date.now()}.png`;
     link.click();
   };
 
   const handleSave = async () => {
-    // TODO: Implement save to gallery functionality
-    toast({
-      title: "Saved to Gallery",
-      description: "Image has been saved to your profile gallery.",
-    });
+    try {
+      if (generatedImage !== null) {
+        designerApi.saveImage(generatedImage.id);
+      }
+    }
+    catch (ex) {
+
+    }
   };
 
   const themes = [
@@ -126,7 +106,7 @@ export default function ImageGenerator({
               </div>
             ) : generatedImage ? (
               <img 
-                src={generatedImage} 
+                src={generatedImage.imageUrl} 
                 alt="AI-generated urban cross-section" 
                 className="w-full h-full object-cover rounded-lg" 
               />
@@ -205,7 +185,7 @@ export default function ImageGenerator({
         <Button 
           onClick={handleGenerate}
           disabled={generateImageMutation.isPending || !user || user.credits <= 0}
-          className="w-full bg-urban-orange hover:bg-urban-orange/90 py-3 font-medium"
+          className="w-full bg-urban-orange-500 hover:bg-urban-orange-700 py-3 font-medium"
         >
           {generateImageMutation.isPending ? (
             <>

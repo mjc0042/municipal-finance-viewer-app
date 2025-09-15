@@ -1,48 +1,60 @@
+import { useState, useEffect } from "react";
+import { useLocation } from 'wouter';
 import Navbar from "@/components/navbar";
-//import ImageGenerator from "@/components/designer/image-generator";
-//import SectionBuilder from "@/components/designer/section-builder";
-import { useState } from "react";
-
-export interface CrossSectionPanel {
-  id: string;
-  name: string;
-  width: number;
-  material: string;
-  use: string;
-  category: string;
-}
+import ImageGenerator from "@/components/designer/image-generator";
+import SectionBuilder from "@/components/designer/section-builder";
+import type { CrossSectionPanel } from "@/lib/designerUtils";
+import { useAuthStore } from "@/store/auth";
 
 export default function Designer() {
+
+  // Check authentication
+  const { isAuthenticated } = useAuthStore();
+    const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLocation('/login');
+    }
+  }, [isAuthenticated]);
+
+  const [units, setUnits] = useState<string>("Feet");
   const [panels, setPanels] = useState<CrossSectionPanel[]>([
     {
       id: "1",
+      position: 1,
       name: "Sidewalk",
       width: 8,
       material: "concrete",
       use: "pedestrian",
-      category: "pedestrian"
+      category: "pedestrian",
+      comments: ""
     },
     {
       id: "2", 
+      position: 2,
       name: "Bike Lane",
       width: 6,
       material: "asphalt",
       use: "cycling",
-      category: "cycling"
+      category: "cycling",
+      comments: ""
     },
     {
       id: "3",
+      position: 3,
       name: "Travel Lane",
       width: 12,
       material: "asphalt", 
       use: "vehicle",
-      category: "vehicle"
+      category: "vehicle",
+      comments: ""
     }
   ]);
   
   const [selectedTheme, setSelectedTheme] = useState("modern");
 
-  return (
+  /*return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       
@@ -51,7 +63,7 @@ export default function Designer() {
         <p className="text-gray-600">Urban design visualization tools.</p>
       </div>
     </div>
-  );
+  );*/
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -61,6 +73,7 @@ export default function Designer() {
         {/* Image Generation Panel */}
         <ImageGenerator 
           panels={panels}
+          units={units}
           selectedTheme={selectedTheme}
           setSelectedTheme={setSelectedTheme}
         />
@@ -68,6 +81,8 @@ export default function Designer() {
         {/* Section Builder Panel */}
         <SectionBuilder 
           panels={panels}
+          units={units}
+          setUnits={setUnits}
           setPanels={setPanels}
           selectedTheme={selectedTheme}
         />

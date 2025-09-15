@@ -3,3 +3,10 @@ export interface DesignTemplate {
     name: string;
     description: string;
   }
+
+export interface GeneratedImage {
+  id: number;
+  imageUrl: string;
+  createdAt: string;
+  isSaved: boolean;
+}

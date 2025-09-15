@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GripVertical, X, Plus } from "lucide-react";
 import type { CrossSectionPanel } from "@/lib/designerUtils";
@@ -39,7 +40,7 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
   const addPanel = () => {
     const newPanel: CrossSectionPanel = {
       id: Date.now().toString(),
-      position: panels.length + 1,
+      position: 0,
       name: "New Panel",
       width: 8,
       material: "concrete",
@@ -79,19 +80,6 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
     setDraggedIndex(null);
   };
 
-  // Allow reordering by typing position directly
-  const handlePositionChange = (index: number, newPos: number) => {
-    if (newPos < 1 || newPos > panels.length) return;
-
-    const newPanels = [...panels];
-    const [moved] = newPanels.splice(index, 1);
-    newPanels.splice(newPos - 1, 0, moved);
-
-    // reset sequential positions
-    const reindexed = newPanels.map((panel, i) => ({ ...panel, position: i + 1 }));
-    setPanels(reindexed);
-  };
-
   //const handleAdvancedOptionChange = (option: keyof typeof advancedOptions, checked: boolean) => {
   //  setAdvancedOptions(prev => ({ ...prev, [option]: checked }));
   //};
@@ -119,24 +107,21 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
   //const useOptions = ["pedestrian", "cycling", "vehicle", "parking", "landscaping", "outdoor-dining", "street-furniture"];
 
   return (
-    <div className="w-1/2 bg-white">
-      {/* Header */}
-      <div className="p-6 border-b">
+    <div className="w-1/2 bg-gray-50">
+      <div className="p-6 border-b border-gray-200 bg-white">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-charcoal">Section Builder</h3>
           <div className="flex items-center space-x-2">
             <span className="text-sm font-medium text-gray-600">Units:</span>
-            <select
-              value={units}
+            <select value={units} 
               onChange={(e) => setUnits(e.target.value)}
-              className="border-gray-300 rounded-md text-xs font-medium focus:ring-indigo-500 focus:border-indigo-500"
-            >
+              className="border-gray-300 rounded-md text-xs font-medium focus:ring-indigo-500 focus:border-indigo-500">
               <option>Feet</option>
               <option>Meters</option>
             </select>
           </div>
         </div>
-        <p className="text-sm text-gray-600">Drag and drop panels or edit positions to define your cross-section</p>
+        <p className="text-sm text-gray-600">Drag and drop panels to define your cross-section</p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -154,13 +139,12 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
                 onDrop={(e) => handleDrop(e, index)}
               >
                 <CardContent className="p-3">
-                  {/* Header Row */}
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
                       <GripVertical className="h-4 w-4 text-gray-400 mr-2 cursor-move" />
                       <Input
                         value={panel.name}
-                        onChange={(e) => updatePanel(index, "name", e.target.value)}
+                        onChange={(e) => updatePanel(index, 'name', e.target.value)}
                         className="font-medium text-sm border-none p-0 h-auto focus-visible:ring-0"
                       />
                     </div>
@@ -173,67 +157,56 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
-
-                  {/* Fields */}
-                  <div className="grid grid-cols-6 gap-3">
-                    {/* Position */}
+                  
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <Label className="text-xs text-gray-600">Pos</Label>
+                      <Label className="text-xs text-gray-600">Width (ft)</Label>
                       <Input
                         type="number"
-                        value={panel.position}
-                        onChange={(e) => handlePositionChange(index, parseInt(e.target.value))}
-                        className="text-xs mt-1 w-18 text-center"
-                        min="1"
-                        max={panels.length}
-                      />
-                    </div>
-
-                    {/* Width */}
-                    <div>
-                      <Label className="text-xs text-gray-600">Width ({units})</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
                         value={panel.width}
-                        onChange={(e) => updatePanel(index, "width", parseFloat(e.target.value) || 0)}
-                        className="text-xs mt-1 w-24 text-center"
+                        onChange={(e) => updatePanel(index, 'width', parseInt(e.target.value) || 0)}
+                        className="text-xs mt-1"
                         min="1"
                         max="50"
                       />
                     </div>
-
-                    {/* Material */}
-                    <div className="col-span-2">
+                    
+                    <div>
                       <Label className="text-xs text-gray-600">Material</Label>
-                      <Input
-                        type="text"
+                      <Select
                         value={panel.material}
-                        onChange={(e) => updatePanel(index, "material", e.target.value)}
-                        className="text-xs mt-1"
-                      />
+                        onValueChange={(value) => updatePanel(index, 'material', value)}
+                      >
+                        <SelectTrigger className="text-xs mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {materialOptions.map((material) => (
+                            <SelectItem key={material} value={material}>
+                              {material.charAt(0).toUpperCase() + material.slice(1).replace('-', ' ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-
-                    {/* Use */}
-                    <div className="col-span-2">
+                    
+                    <div>
                       <Label className="text-xs text-gray-600">Use</Label>
-                      <Input
-                        type="text"
+                      <Select
                         value={panel.use}
-                        onChange={(e) => updatePanel(index, "use", e.target.value)}
-                        className="text-xs mt-1"
-                      />
-                    </div>
-
-                    {/* Comments - full row */}
-                    <div className="col-span-4">
-                      <Label className="text-xs text-gray-600">Comments</Label>
-                      <textarea
-                        value={panel.comments || ""}
-                        onChange={(e) => updatePanel(index, "comments", e.target.value)}
-                        className="w-full mt-1 text-xs border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 min-h-[60px] resize-y"
-                        placeholder="Add notes or additional details..."
-                      />
+                        onValueChange={(value) => updatePanel(index, 'use', value)}
+                      >
+                        <SelectTrigger className="text-xs mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {useOptions.map((use) => (
+                            <SelectItem key={use} value={use}>
+                              {use.charAt(0).toUpperCase() + use.slice(1).replace('-', ' ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </CardContent>
@@ -257,16 +230,16 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
           <Card>
             <CardContent className="p-4">
               <div className="flex items-end space-x-1 justify-center min-h-[80px]">
-                {panels.map((panel) => (
+                {panels.map((panel, index) => (
                   <div
                     key={panel.id}
                     className={`${getPanelColor(panel.category)} flex items-center justify-center text-xs font-medium text-gray-700 transition-all hover:shadow-md`}
                     style={{
                       width: `${(panel.width / Math.max(getTotalWidth(), 1)) * 300}px`,
                       height: `${Math.max(20, panel.width * 2)}px`,
-                      minWidth: "20px",
+                      minWidth: '20px'
                     }}
-                    title={`${panel.name}: ${panel.width}${units}`}
+                    title={`${panel.name}: ${panel.width}ft`}
                   >
                     {getPanelAbbreviation(panel.name)}
                   </div>
@@ -278,11 +251,56 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
                 )}
               </div>
               <div className="text-center mt-3 text-xs text-gray-600">
-                Total Width: {getTotalWidth()} {units}
+                Total Width: {getTotalWidth()} ft
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Advanced Options */}
+        {/* <div>
+          <h4 className="font-medium text-charcoal mb-3">Advanced Options</h4>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="streetTrees"
+                checked={advancedOptions.streetTrees}
+                onCheckedChange={(checked) => 
+                  handleAdvancedOptionChange('streetTrees', checked as boolean)
+                }
+              />
+              <Label htmlFor="streetTrees" className="text-sm">
+                Include street trees
+              </Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="buildingFacades"
+                checked={advancedOptions.buildingFacades}
+                onCheckedChange={(checked) => 
+                  handleAdvancedOptionChange('buildingFacades', checked as boolean)
+                }
+              />
+              <Label htmlFor="buildingFacades" className="text-sm">
+                Show building facades
+              </Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="pedestriansVehicles"
+                checked={advancedOptions.pedestriansVehicles}
+                onCheckedChange={(checked) => 
+                  handleAdvancedOptionChange('pedestriansVehicles', checked as boolean)
+                }
+              />
+              <Label htmlFor="pedestriansVehicles" className="text-sm">
+                Add pedestrians & vehicles
+              </Label>
+            </div>
+          </div>
+        </div>*/}
 
         {/* Theme Info */}
         <Card className="bg-gray-100 border-gray-200">
@@ -294,7 +312,7 @@ export default function SectionBuilder({ panels, units, setUnits, setPanels, sel
               </div>
               <div className="text-right">
                 <p className="text-xs text-gray-600">Panels: {panels.length}</p>
-                <p className="text-xs text-gray-600">Width: {getTotalWidth()} {units}</p>
+                <p className="text-xs text-gray-600">Width: {getTotalWidth()}ft</p>
               </div>
             </div>
           </CardContent>
