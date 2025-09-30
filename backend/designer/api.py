@@ -39,7 +39,9 @@ def generate_cross_section(request, units:str, theme:str, sections:str):
         print(prompt)
 
         # Generate and fetch image from LLM
-        image_url = call_llm_api(prompt)
+        # For now, just use the placeholder image
+        image_url = get_placeholder_image_url(request)
+        #image_url = call_llm_api(prompt) # TODO
 
         # TODO: (Future) Generate bird's eye render
 
@@ -55,14 +57,22 @@ def generate_cross_section(request, units:str, theme:str, sections:str):
         # TODO: Update user credits
 
         # Clean up old unsaved images (keeping 10 most recent)
-        old_images=GeneratedImage.objects.filter(
+        old_images = GeneratedImage.objects.filter(
             user=request.user,
             is_saved=False
-        ).order_by('-create_ad')[10:]
-        old_images.delete()
+        ).order_by('-created_at')
+
+        # Get IDs of images to keep (first 10)
+        keep_ids = old_images.values_list('id', flat=True)[:10]
+
+        # Delete images not in the keep list
+        GeneratedImage.objects.filter(
+            user=request.user,
+            is_saved=False
+        ).exclude(id__in=keep_ids).delete()
 
         return JsonResponse({
-            "image:": {
+            "image": {
                 "id": generated_image.id,
                 "imageUrl": image_url,
                 "createdAt": generated_image.created_at,
@@ -84,3 +94,9 @@ def save_image(request, image_id: int):
         return JsonResponse({"success": True})
     except ObjectDoesNotExist:
         return JsonResponse({"error": "Image not found"}, status=404)
+
+
+from urllib.parse import urljoin
+def get_placeholder_image_url(request):
+    """Returns the full URL to the placeholder image"""
+    return urljoin(f"{request.scheme}://{request.get_host()}", 'static/cross_section_4_3.png')

@@ -36,21 +36,16 @@ export default function ImageGenerator({
   //const queryClient = useQueryClient();
 
   const generateImageMutation = useMutation({
-    mutationFn: async () => {
-      //const prompt = `Urban street cross-section with ${panels.map(p => 
-      //  `${p.width}ft ${p.name.toLowerCase()} (${p.material})`
-      //).join(', ')}. Professional urban planning visualization.`;
-      
+    mutationFn: async () => {    
       const resData = await designerApi.generateCrossSectionImage(
         units,
         selectedTheme,
         panels
-      );
-      
-      return await resData;
+      );      
+      return resData;
     },
-    onSuccess: (data) => {
-      setGeneratedImage(data.image.imageUrl);
+    onSuccess: (imageData) => {
+      setGeneratedImage(imageData);
     },
     onError: (error: Error) => {
       console.log("Generation failed", error);
@@ -72,8 +67,12 @@ export default function ImageGenerator({
 
   const handleSave = async () => {
     try {
-      if (generatedImage !== null) {
-        designerApi.saveImage(generatedImage.id);
+      if (generatedImage !== null && generatedImage.isSaved === false) {
+        const res = await designerApi.saveImage(generatedImage.id);
+        
+        if (res) {
+          generatedImage.isSaved = true;
+        }
       }
     }
     catch (ex) {
@@ -108,7 +107,7 @@ export default function ImageGenerator({
               <img 
                 src={generatedImage.imageUrl} 
                 alt="AI-generated urban cross-section" 
-                className="w-full h-full object-cover rounded-lg" 
+                className="w-full h-auto object-contain rounded-lg" // alternative: object-cover
               />
             ) : (
               <div className="text-center">
@@ -127,7 +126,7 @@ export default function ImageGenerator({
                   <Download className="h-4 w-4 mr-1" />
                   Download
                 </Button>
-                <Button onClick={handleSave} variant="outline" size="sm">
+                <Button onClick={handleSave} variant="outline" size="sm" disabled={generatedImage.isSaved}>
                   <Save className="h-4 w-4 mr-1" />
                   Save to Gallery
                 </Button>
