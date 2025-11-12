@@ -1,0 +1,144 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useFinanceStore } from '@/stores/finance'
+import { useFramesStore } from '@/stores/frames'
+import { financialApi } from '@/composables/api/financialApi'
+import { nanoid } from 'nanoid'
+import { storeToRefs } from 'pinia'
+import type { SelectMunicipalityEvent } from '~/types/events/selectMunicipalityEvent'
+import type { ShowMunicipalFinancesEvent } from '~/types/events/showMunicipalFinancesEvent'
+import { FrameType } from '@/types/store/frames'
+
+const financeStore = useFinanceStore()
+const framesStore = useFramesStore()
+const { frames }  = storeToRefs(framesStore)
+
+let stateBoundaries;
+async function fetchStateData() {
+  // Simulate an API call
+  const response = await financialApi.getStateBoundaries();
+  stateBoundaries = Object.freeze(response)
+}
+
+// Add new US map frame with unique id
+function addNewMapFrame() {
+  framesStore.addFrame({
+    id: nanoid(),
+    title: 'US',
+    type: FrameType.MapUS,
+    minimized: false,
+    position: { x: 120, y: 120 },
+    size: { width: 600, height: 600},
+    trayIndex: undefined,
+    zIndex: 100
+  })
+}
+
+function onAddNewMunicipalMapFrame(event: SelectMunicipalityEvent) {
+  const frameId = nanoid()
+  financeStore.setSelectedMunicipality(frameId, event.stateInfo.code, event.featureId, event.mid)
+  framesStore.addFrame({
+    id: frameId,
+    title: event.municipalityName + ', ' + event.stateInfo.abbr,
+    type: FrameType.MapMunicipal,
+    minimized: false,
+    position: { x: 120, y: 120 },
+    size: { width: 600, height: 600},
+    trayIndex: undefined,
+    zIndex: 100
+  })
+}
+
+function onAddMunicipalFinancesFrame(event: ShowMunicipalFinancesEvent) {
+  console.log("Adding municipal finances frame")
+  const frameId = nanoid()
+  financeStore.addMunicipalFinancesForFrame(frameId, event.mid)
+  framesStore.addFrame({
+    id: frameId,
+    title: event.municipalityName + ' - Finances',
+    type: FrameType.FinanceInfo,
+    minimized: false,
+    position: { x: 120, y: 120 },
+    size: { width: 600, height: 600},
+    trayIndex: undefined,
+    zIndex: 100
+
+  })
+}
+
+function onAddMunicipalChartsFrame(mid: string, municipalityName: string) {
+  const frameId = nanoid()
+  financeStore.addMunicipalFinancesForFrame(frameId, mid)
+  framesStore.addFrame({
+    id: frameId,
+    title: municipalityName + ' - Charts',
+    type: FrameType.FinanceCharts,
+    minimized: false,
+    position: { x: 120, y: 120 },
+    size: { width: 600, height: 450},
+    trayIndex: undefined,
+    zIndex: 100
+
+  })
+}
+
+function onCloseFrame(frameId:string, frameType:FrameType) {
+  financeStore.removeFrameData(frameId, frameType)
+}
+
+onMounted(() => {
+  fetchStateData()
+})
+
+</script>
+
+<template>
+  <div class="h-screen flex flex-col">
+    <NavBar class="shrink-0"/>
+
+    <!-- Working area -->
+    <div class="grow bg-[#303030] z-0 overflow-hidden relative">
+      <div class="absolute z-30">
+        <FinanceSearch />
+        <button @click="addNewMapFrame" 
+          class="relative m-2 flex justify-center items-center p-2 bg-white rounded-xs drop-shadow-xl/25 overflow-hidden cursor-pointer text-black hover:text-neutral-700">
+            <Icon name="carbon:add-large" size="24" />
+        </button>
+      </div>
+      <div class="absolute z-10">
+        <FinanceMapFrame
+          v-for="frame in frames.filter(f => f.type === FrameType.MapUS || f.type === FrameType.MapState)"
+          :key="frame.id"
+          :frame="frame"
+          :stateBoundaries="stateBoundaries"
+          @selectMunicipality="onAddNewMunicipalMapFrame"
+          @closeFrame="onCloseFrame"
+        />
+        <FinanceMunicipalMapFrame
+          v-for="frame in frames.filter(f => f.type === FrameType.MapMunicipal && financeStore.getSelectedMunicipality(f.id) !== null)"
+          :key="frame.id"
+          :frame="frame"
+          :municipal-boundary="financeStore.getSelectedMunicipality(frame.id)!"
+          @showFinances="onAddMunicipalFinancesFrame"
+          @showCharts="onAddMunicipalChartsFrame"
+          @closeFrame="onCloseFrame"
+        />
+        <FinanceMunicipalInfoFrame
+          v-for="frame in frames.filter(f => f.type === FrameType.FinanceInfo)"
+          :key="frame.id"
+          :frame="frame"
+          @closeFrame="onCloseFrame"
+        />
+        <FinanceMunicipalChartFrame
+          v-for="frame in frames.filter(f => f.type === FrameType.FinanceCharts)"
+          :key="frame.id"
+          :frame="frame"
+          @closeFrame="onCloseFrame"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+</style>

@@ -13,4 +13,10 @@ local_settings.py
 static/
 
 # NPM
-package-lock.json
+*/package-lock.json
+*/node_modules
+
+# Nuxt
+*/.nuxt/
+*/.output/
+*/.data
