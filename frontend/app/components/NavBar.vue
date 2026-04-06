@@ -25,7 +25,7 @@ function logout() {
 
 <nav class="bg-white border-gray-200 dark:bg-zinc-950">
   <div class="max-w-7xl flex flex-wrap items-center justify-between mx-auto p-2">
-  <a href="https://flowbite.com/" class="flex items-center space-x-3 rtl:space-x-reverse text-white">
+  <a href="/" class="flex items-center space-x-3 rtl:space-x-reverse text-white">
       <Icon name="streamline:city-hall-remix" size="24" />
       <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Axon</span>
   </a>
