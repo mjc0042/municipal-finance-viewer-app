@@ -19,7 +19,7 @@ from ninja_jwt.authentication import JWTAuth
 from .lib.state_utils import get_state_abreviation
 from .models.municipal_finance import Municipalities, MunicipalFinances
 from .models.gis_boundaries import MunicipalBoundaries, StateBoundaries
-from .schemas import MunicipalityFinance, MunicipalBoundaryResponse, StateBoundaryResponse
+from .schemas import MunicipalityFinance, MunicipalBoundaryResponse, StateBoundaryResponse, MunicipalityInfo
 
 from .fake_finance_modeller import generate_historic_financials
 
@@ -107,8 +107,26 @@ def get_municipality_finances(request, mid:str):
     # For now, return sample data
     #return generate_historic_financials()
 
-    qs = MunicipalFinances.objects.using('municipal_finance').filter(mid=mid)
+    qs = MunicipalFinances.objects.using('municipal_finance').filter(mid=mid).order_by('year')
     data = list(qs.values()) #serialize('json', qs)
+    return JsonResponse(data, safe=False, status=200)
+
+
+@router.get("/municipality/list", response=list[MunicipalityInfo], auth=JWTAuth())
+def get_municipality_list(request):
+    """Get list of all municipalities for search dropdown"""
+    qs = Municipalities.objects.using('municipal_finance').all().values(
+        'mid', 'name', 'state', 'county_fips'
+    )
+    data = []
+    for row in qs:
+        fips = row['county_fips'] or ''
+        data.append({
+            'mid': str(row['mid']),
+            'name': row['name'],
+            'state': row['state'],
+            'county_fips': fips
+        })
     return JsonResponse(data, safe=False, status=200)
 
 

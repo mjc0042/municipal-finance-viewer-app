@@ -70,3 +70,10 @@ export interface MunicipalityFinance {
     modifier: string;
     created_at: string; // ISO timestamp
   }
+
+export interface MunicipalityInfo {
+  mid: string;
+  name: string;
+  state: string;
+  county_fips: string;
+}

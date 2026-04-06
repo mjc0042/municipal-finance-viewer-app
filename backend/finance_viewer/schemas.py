@@ -112,3 +112,10 @@ class MunicipalityFinance(Schema):
 
     modifier: str
     created_at: datetime.datetime
+
+
+class MunicipalityInfo(Schema):
+    mid: str
+    name: str
+    state: str
+    county_fips: Optional[str]

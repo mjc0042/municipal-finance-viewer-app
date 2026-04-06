@@ -24,9 +24,15 @@ export const useFinanceStore = defineStore('finance', {
     searchQuery: '',
   }),
   actions: {
+    async getStateMunicipalBoundaries(stateName: string, abbr: string, code: string): Promise<MunicipalBoundaryCollection | null> {
+      if (!this.municipalBoundariesByState[Number(code)]) {
+        const boundaries = await financialApi.getMunicipalBoundaries(stateName, abbr, code)
+        this.municipalBoundariesByState[Number(code)] = boundaries
+      }
+      return this.municipalBoundariesByState[Number(code)] ?? null
+    },
     async setSelectedState(frameId: string, stateName: string, abbr: string, code: string) {
-      const boundaries = await financialApi.getMunicipalBoundaries(stateName, abbr, code)
-      this.municipalBoundariesByState[Number(code)] = boundaries
+      await this.getStateMunicipalBoundaries(stateName, abbr, code)
       this.selectedStatesByFrame[frameId] = { name: stateName, abbr, code: code }
     },
     removeFrameData(frameId: string, type: FrameType | undefined) {

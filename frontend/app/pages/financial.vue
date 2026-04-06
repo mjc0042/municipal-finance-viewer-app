@@ -5,19 +5,26 @@ import { useFramesStore } from '@/stores/frames'
 import { financialApi } from '@/composables/api/financialApi'
 import { nanoid } from 'nanoid'
 import { storeToRefs } from 'pinia'
-import type { SelectMunicipalityEvent } from '~/types/events/selectMunicipalityEvent'
+import type { SearchMunicipalityEvent, SelectMunicipalityEvent } from '~/types/events/selectMunicipalityEvent'
 import type { ShowMunicipalFinancesEvent } from '~/types/events/showMunicipalFinancesEvent'
 import { FrameType } from '@/types/store/frames'
+import type { StateInfo } from '@/types/store/finance'
 
 const financeStore = useFinanceStore()
 const framesStore = useFramesStore()
 const { frames }  = storeToRefs(framesStore)
+const stateInfoList = ref<StateInfo[]>([])
 
 let stateBoundaries;
 async function fetchStateData() {
   // Simulate an API call
   const response = await financialApi.getStateBoundaries();
-  stateBoundaries = Object.freeze(response)
+  stateBoundaries = Object.freeze(response);
+  stateInfoList.value = response.map((f: any) => ({
+    name: f.properties.name,
+    abbr: f.properties.stusps,
+    code: f.properties.statefp,
+  }))
 }
 
 // Add new US map frame with unique id
@@ -47,6 +54,34 @@ function onAddNewMunicipalMapFrame(event: SelectMunicipalityEvent) {
     trayIndex: undefined,
     zIndex: 100
   })
+}
+
+async function onAddMunicipalFinancesFromSearch({ municipalityInfo }: SearchMunicipalityEvent) {
+  
+  // Get state code
+  const stateInfo:StateInfo = stateInfoList.value.find(s => s.abbr === municipalityInfo.state) ?? {
+    name: "",
+    abbr: municipalityInfo.state,
+    code: municipalityInfo.county_fips.substring(0,2)
+  };
+
+  // Get municipality GIS data
+  const boundaries = await financeStore.getStateMunicipalBoundaries(
+    stateInfo.name,
+    stateInfo.abbr,
+    stateInfo.code
+  )
+
+  // Find the feature by matching mid in the feature properties
+  const feature = boundaries?.features.find(f => f.properties.mid === municipalityInfo.mid)
+  const featureId = feature?.id ?? -1
+
+  onAddNewMunicipalMapFrame({
+    stateInfo: stateInfo,
+    featureId: featureId,
+    mid: municipalityInfo.mid,
+    municipalityName: municipalityInfo.name
+  });
 }
 
 function onAddMunicipalFinancesFrame(event: ShowMunicipalFinancesEvent) {
@@ -99,7 +134,7 @@ onMounted(() => {
     <!-- Working area -->
     <div class="grow bg-[#303030] z-0 overflow-hidden relative">
       <div class="absolute z-30">
-        <FinanceSearch />
+        <FinanceSearch @searchMunicipality="onAddMunicipalFinancesFromSearch" />
         <button @click="addNewMapFrame" 
           class="relative m-2 flex justify-center items-center p-2 bg-white rounded-xs drop-shadow-xl/25 overflow-hidden cursor-pointer text-black hover:text-neutral-700">
             <Icon name="carbon:add-large" size="24" />
