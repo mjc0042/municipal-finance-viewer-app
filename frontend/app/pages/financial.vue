@@ -10,6 +10,10 @@ import type { ShowMunicipalFinancesEvent } from '~/types/events/showMunicipalFin
 import { FrameType } from '@/types/store/frames'
 import type { StateInfo } from '@/types/store/finance'
 
+definePageMeta({
+  middleware: 'auth'
+})
+
 const financeStore = useFinanceStore()
 const framesStore = useFramesStore()
 const { frames }  = storeToRefs(framesStore)

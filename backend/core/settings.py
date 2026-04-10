@@ -145,12 +145,12 @@ AUTH_PASSWORD_VALIDATORS = [
 
 AUTH_USER_MODEL = 'main.CustomUser'
 
-#NINJA_JWT = {
-#    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
-#    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-#    "ROTATE_REFRESH_TOKENS": True,
-#    "BLACKLIST_AFTER_ROTATION": True,
-#}
+NINJA_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=5),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
 
 
 # Internationalization

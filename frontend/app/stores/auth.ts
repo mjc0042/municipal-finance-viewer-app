@@ -28,11 +28,46 @@ export const useAuthStore = defineStore('auth', {
     async refreshToken() {
       if (!this.tokens.refresh) throw new Error("No refresh token");
       try {
+        const response = await authApi.refreshToken(this.tokens.refresh)
+        this.tokens = response
+        return response
+      } catch (error) {
+        // Silent logout - clear state and redirect
+        this.$reset()
+        const router = useRouter()
+        router.push('/login')
+        throw error
+      }
+      /*try {
         const response = await authApi.refreshToken(this.tokens.refresh);
         this.tokens = response;
         apiClient.defaults.headers.common.Authorization = `Bearer ${response.access}`;
       } catch {
         this.logout();
+      }*/
+    },
+    checkAuth() {
+      if (!this.tokens?.access) return false
+      
+      try {
+        const parsedToken:string[] = this.tokens.access.split('.')
+        if (parsedToken.length < 2) return false
+
+        const payload = parsedToken[1] ? JSON.parse(atob(parsedToken[1])) : null;
+        if (!payload) return false;
+
+        const now = Date.now() / 1000
+        
+        // Refresh if token expires within 5 minutes
+        if (payload.exp - now < 300) {
+          this.refreshToken().catch(() => {
+            // Refresh failed, logout handled above
+          })
+        }
+        
+        return payload.exp > now
+      } catch {
+        return false
       }
     },
     async getUser() {

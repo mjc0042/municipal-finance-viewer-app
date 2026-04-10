@@ -1,6 +1,7 @@
 import { apiClient } from '@/composables/api/apiClient';
 import type { User, RegisterData } from '~/types/http/auth';
 
+import './authInterceptor';
 
 export const authApi = {
     register: async (data:RegisterData) => {
