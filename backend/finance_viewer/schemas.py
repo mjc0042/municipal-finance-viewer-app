@@ -119,3 +119,12 @@ class MunicipalityInfo(Schema):
     name: str
     state: str
     county_fips: Optional[str]
+
+
+class ParcelUploadResponse(Schema):
+    objectid: str
+    taxpin: str
+    assessed_value: str
+    shape_area: float
+    address: str
+    geometry: dict

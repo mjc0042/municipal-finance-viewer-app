@@ -12,6 +12,7 @@ interface FinanceState {
   frameMidMap: Record<string, string>
   financesByMunicipality: Record<string, MunicipalityFinance[] | null>
   searchQuery: string;
+  municipalParcelDataByFrame: Record<string, any>
 }
 
 export const useFinanceStore = defineStore('finance', {
@@ -22,6 +23,7 @@ export const useFinanceStore = defineStore('finance', {
     frameMidMap: {},
     financesByMunicipality: {},
     searchQuery: '',
+    municipalParcelDataByFrame: {}
   }),
   actions: {
     async getStateMunicipalBoundaries(stateName: string, abbr: string, code: string): Promise<MunicipalBoundaryCollection | null> {
@@ -86,6 +88,29 @@ export const useFinanceStore = defineStore('finance', {
     },
     setSearchQuery(query: string) {
       this.searchQuery = query;
+    },
+    async addParcelDataForFrame(
+      frameId: string,
+      file: File,
+      mid: string | null,
+      municipalityGisData: MunicipalFeature | null) {
+
+      if (!frameId || frameId === '') {
+        throw new Error('Frame ID is required to add parcel data')
+      }
+
+      if (mid == undefined || mid == null || mid === '') {
+        mid = this.frameMidMap[frameId] ?? ''
+      }
+
+      if (municipalityGisData == undefined || municipalityGisData == null) {
+        municipalityGisData = this.selectedMunicipalitiesByFrame[frameId] ?? null
+      }
+      
+      // Send parcel data to API to get modified GIS data for the municipality
+      const data = await financialApi.uploadParcelData(file, mid)
+      this.municipalParcelDataByFrame[frameId] = data
+      return data
     }
   },
   persist: {

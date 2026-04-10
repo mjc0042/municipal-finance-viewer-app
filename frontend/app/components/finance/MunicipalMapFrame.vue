@@ -1,15 +1,12 @@
 <script setup lang="ts">
-import {
-  ToolbarButton,
-  ToolbarRoot,
-  ToolbarSeparator,
-} from 'reka-ui'
-import { ref  } from 'vue'
-import type { MunicipalFeature } from '@/types/http/gis'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
-import { FrameType, type Frame } from '@/types/store/frames'
+import { ToolbarButton, ToolbarRoot, ToolbarSeparator } from 'reka-ui'
+import { ref  } from 'vue'
 import type { ShowMunicipalFinancesEvent } from '@/types/events/showMunicipalFinancesEvent'
+import type { MunicipalFeature } from '@/types/http/gis'
+import { FrameType, type Frame } from '@/types/store/frames'
+import { useFinanceStore } from '@/stores/finance'
 
 const props = defineProps<{
   frame: Frame
@@ -24,13 +21,37 @@ const emit = defineEmits<{
 }>()
 
 const mapRef = ref<HTMLDivElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const message = ref('')
+const messageType = ref('success')
+const showMessage = ref(false)
 let mapInstance: L.Map | null = null
 let municipalLayer: L.GeoJSON<any> | null = null
+let parcelLayer: L.GeoJSON<any> | null = null
 
 function clearLayers() {
   if (municipalLayer) {
     municipalLayer.remove()
     municipalLayer = null
+  }
+  if (parcelLayer) {
+    parcelLayer.remove()
+    parcelLayer = null
+  }
+}
+
+function addParcelLayer(geojson: any) {
+  if (parcelLayer) {
+    parcelLayer.remove()
+  }
+  if (mapInstance) {
+    parcelLayer = L.geoJSON(geojson, {
+      style: () => ({
+        color: 'blue',
+        weight: 1,
+        fillOpacity: 0.3
+      }),
+    }).addTo(mapInstance)
   }
 }
 
@@ -88,7 +109,47 @@ onUnmounted(() => {
     mapInstance.remove()
     mapInstance = null
   }
+  if (parcelLayer) {
+    parcelLayer.remove()
+    parcelLayer = null
+  }
 })
+
+function onClickAddParcelData() {
+  fileInputRef.value?.click()
+}
+
+async function onFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    message.value = 'Processing parcel file...'
+    messageType.value = 'success'
+    showMessage.value = true
+    try {
+      const store = useFinanceStore()
+      const response = await store.addParcelDataForFrame(
+        props.frame.id,
+        file,
+        props.municipalBoundary.properties.mid,
+        props.municipalBoundary
+      )
+
+      if (response && !response.error) {
+        message.value = 'Parcel data uploaded successfully'
+        addParcelLayer(response)
+      } else {
+        message.value = response?.error || 'Upload failed'
+        messageType.value = 'error'
+      }
+    } catch (e) {
+      message.value = 'Upload failed'
+      messageType.value = 'error'
+    }
+    setTimeout(() => showMessage.value = false, 10000)
+  }
+}
+
 </script>
 
 <template>
@@ -106,6 +167,9 @@ onUnmounted(() => {
               :style="{ width: size.width + 'px', height: size.height + 'px' }"
               ref="mapRef"
           />
+          <div v-if="showMessage" :class="messageType === 'error' ? 'text-red-500' : 'text-blue-500'" class="absolute top-10 right-4 p-2 text-sm bg-white shadow-lg shadow-neutral-500 border border-gray-300 rounded z-50">
+          {{ message }}
+          </div>
 
           <!-- Buttons Container -->
           <div class="absolute bottom-0 left-0 mb-7 ml-2.5 flex z-20">
@@ -116,7 +180,7 @@ onUnmounted(() => {
               <ToolbarButton
                 class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
                 style="margin-left: auto"
-                @click="$emit('addParcelData')"
+                @click=onClickAddParcelData
               >
                 Parcels
               </ToolbarButton>
@@ -138,6 +202,13 @@ onUnmounted(() => {
               </ToolbarButton>
             </ToolbarRoot>
           </div>
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".zip"
+            style="display: none"
+            @change="onFileSelected"
+          />
         </div>
     </template>
   </FinanceBaseFrame>
