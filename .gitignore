@@ -5,6 +5,7 @@
 
 # Python files
 *.pyc
+*.python-version
 __pycache__/
 
 # Django
@@ -20,3 +21,4 @@ static/
 */.nuxt/
 */.output/
 */.data
+
