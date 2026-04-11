@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, defineExpose } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts';
 
 const props = defineProps<{ 
@@ -101,9 +101,6 @@ onBeforeUnmount(() => {
     //}
 })
 
-defineExpose({
-  resize
-});
 </script>
 
 <template>
