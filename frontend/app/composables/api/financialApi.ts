@@ -1,5 +1,6 @@
 import { apiClient } from '@/composables/api/apiClient';
-import type { MunicipalFeature, StateBoundary } from '~/types/http/gis';
+import type { ErrorResponse } from '~/types/http/common';
+import type { MunicipalFeature, StateBoundary, ParcelUploadResponse } from '~/types/http/gis';
 import type { MunicipalityFinance, MunicipalityInfo } from '~/types/http/finance';
 
 export const financialApi = {
@@ -32,13 +33,17 @@ export const financialApi = {
     const response = await apiClient.post(`/financial/municipality/finances/add/year`, data);
     return response.data;
   },
-  uploadParcelData: async (file: File, mid:string) => {
+  uploadParcelData: async (file: File, mid:string):Promise<ParcelUploadResponse | ErrorResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     const response = await apiClient.post(
       `/financial/gis/municipality/parcels`,
       formData,
-      { params: { mid }, headers: { 'Content-Type': 'multipart/form-data' } }
+      { 
+        params: { mid },
+        headers: { 'Content-Type': 'multipart/form-data' },
+        maxContentLength: 10000000 // 10MB
+      }
     );
     return response.data;
   }

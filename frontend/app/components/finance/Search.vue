@@ -28,7 +28,7 @@ function getDisplayLabel(muni: MunicipalityInfo): string {
 
 const filteredMunicipalities = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
-  console.log(query, municipalities.value);
+
   if (!query) return []
   return municipalities.value
     .filter(m => getDisplayLabel(m).toLowerCase().includes(query))

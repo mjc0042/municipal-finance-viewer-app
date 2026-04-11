@@ -2,7 +2,7 @@
 import datetime
 
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from ninja import Schema
@@ -120,11 +120,18 @@ class MunicipalityInfo(Schema):
     state: str
     county_fips: Optional[str]
 
-
-class ParcelUploadResponse(Schema):
+class ParcelFeatureProperties(Schema):
     objectid: str
     taxpin: str
     assessed_value: str
     shape_area: float
     address: str
-    geometry: dict
+
+class ParcelFeature(Schema):
+    type: str
+    geometry: Dict[str, Any]
+    properties: ParcelFeatureProperties
+
+class ParcelUploadResponse(Schema):
+    type: str
+    features: List[ParcelFeature]

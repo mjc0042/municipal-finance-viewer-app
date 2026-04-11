@@ -30,6 +30,7 @@ from .schemas import (
     MunicipalityFinance,
     MunicipalityInfo,
     MunicipalBoundaryResponse,
+    ParcelUploadResponse,
     StateBoundaryResponse
 )
 
@@ -148,7 +149,7 @@ def add_municipality_yearly_finances(request):
 
     return JsonResponse({"success": True, "message": "Record created successfully"}, status=200)
 
-@router.post("/gis/municipality/parcels", auth=JWTAuth())
+@router.post("/gis/municipality/parcels", response=ParcelUploadResponse, auth=JWTAuth())
 def upload_parcel_data(request, file:File[UploadedFile], mid:str):
     """ Upload and process parcel shapefile """
 
@@ -160,7 +161,7 @@ def upload_parcel_data(request, file:File[UploadedFile], mid:str):
 
     try:
         municipal_boundary = query_municipality_boundary(mid)
-        print(municipal_boundary)
+
         extracted = handle_shapefile_upload(
             file.file,
             municipal_boundary)

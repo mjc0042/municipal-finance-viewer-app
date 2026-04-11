@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { financialApi } from '@/composables/api/financialApi'
-import type { StateBoundary, MunicipalFeature, MunicipalBoundaryCollection } from '@/types/http/gis'
+import type { ErrorResponse } from '@/types/http/common'
+import type { MunicipalFeature, MunicipalBoundaryCollection, ParcelUploadResponse } from '@/types/http/gis'
 import type { MunicipalityFinance } from '@/types/http/finance'
 import type { StateInfo } from '@/types/store/finance'
 import { FrameType } from '@/types/store/frames'
+import type { List } from 'echarts'
 
 interface FinanceState {
   selectedStatesByFrame: Record<string, StateInfo | null>
@@ -93,7 +95,7 @@ export const useFinanceStore = defineStore('finance', {
       frameId: string,
       file: File,
       mid: string | null,
-      municipalityGisData: MunicipalFeature | null) {
+      municipalityGisData: MunicipalFeature | null): Promise<ParcelUploadResponse | ErrorResponse> {
 
       if (!frameId || frameId === '') {
         throw new Error('Frame ID is required to add parcel data')
@@ -109,11 +111,14 @@ export const useFinanceStore = defineStore('finance', {
       
       // Send parcel data to API to get modified GIS data for the municipality
       const data = await financialApi.uploadParcelData(file, mid)
+      console.log('Received processed parcel data:', data)
       this.municipalParcelDataByFrame[frameId] = data
       return data
     }
   },
   persist: {
-    storage: piniaPluginPersistedstate.sessionStorage()
+    storage: piniaPluginPersistedstate.sessionStorage(),
+    omit: [ 'municipalParcelDataByFrame' ],
+    debug: true
   }
 })

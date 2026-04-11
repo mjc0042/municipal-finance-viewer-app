@@ -49,3 +49,22 @@ export interface MunicipalBoundaryCollection extends GeoJSON.FeatureCollection {
     type: 'FeatureCollection';
     features: MunicipalFeature[];
 }
+
+export interface ParcelFeatureProperties {
+    objectid: string;
+    taxpin: string;
+    assessed_value: string;
+    shape_area: number;
+    address: string;
+  }
+  
+  export interface ParcelFeature {
+    type: string;
+    geometry: any;  // GeoJSON geometry
+    properties: ParcelFeatureProperties;
+  }
+  
+  export interface ParcelUploadResponse {
+    type: string;
+    features: ParcelFeature[];
+  }

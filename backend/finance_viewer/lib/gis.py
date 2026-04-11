@@ -6,7 +6,6 @@ from django.core.serializers import serialize
 from django.db.models import Q
 from django.db.models.functions import Substr
 
-from finance_viewer.lib.state_utils import get_state_abreviation
 from finance_viewer.models.municipal_finance import Municipalities
 from finance_viewer.models.gis_boundaries import MunicipalBoundaries
 
@@ -67,7 +66,7 @@ def query_municipality_boundary(mid):
     Args:
         mid (str): Municipal ID
     Returns:
-        (Municipal)
+        (object) : Municipal boundary spatial data
     """
 
     municipality = Municipalities.objects.using('municipal_finance').filter(mid=mid).first()
@@ -76,17 +75,13 @@ def query_municipality_boundary(mid):
         return None
 
     name = municipality.name
-    state = municipality.state
+    state_abbr = municipality.state
     county_fips = municipality.county_fips
-    state_lookup = get_state_abreviation(state)
-
-    if state_lookup is None:
-        return None
 
     qs = MunicipalBoundaries.objects.using('gis_boundaries').annotate(
         county_fips5=Substr('fips_code', 1, 5)
     ).filter(
-        state=state_lookup,
+        state=state_abbr,
         county_fips5=county_fips,
         municipal_name=name
     )

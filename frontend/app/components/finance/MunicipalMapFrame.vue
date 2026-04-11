@@ -47,11 +47,22 @@ function addParcelLayer(geojson: any) {
   if (mapInstance) {
     parcelLayer = L.geoJSON(geojson, {
       style: () => ({
-        color: 'blue',
+        color: '#040203',
         weight: 1,
-        fillOpacity: 0.3
+        opacity: 1,
+        fillOpacity: 0.1
       }),
     }).addTo(mapInstance)
+
+    if (municipalLayer) {
+      municipalLayer.setStyle({
+        color: '#2c3e50',
+        weight: 1.5,
+        opacity: 1,
+        fillOpacity: 0,
+        dashArray: '5, 5'
+      })
+    }
   }
 }
 
@@ -135,12 +146,15 @@ async function onFileSelected(event: Event) {
         props.municipalBoundary
       )
 
-      if (response && !response.error) {
-        message.value = 'Parcel data uploaded successfully'
-        addParcelLayer(response)
+      if (response && 'error' in response) {
+        message.value = response.error;
+        messageType.value = 'error';
+      } else if (response && 'features' in response) {
+        message.value = 'Success';
+        addParcelLayer(response);
       } else {
-        message.value = response?.error || 'Upload failed'
-        messageType.value = 'error'
+        message.value = 'Upload failed';
+        messageType.value = 'error';
       }
     } catch (e) {
       message.value = 'Upload failed'
