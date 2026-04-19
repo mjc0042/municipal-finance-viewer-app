@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import chroma from "chroma-js"
+import { evaluate } from 'mathjs'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import { ToolbarButton, ToolbarRoot, ToolbarSeparator } from 'reka-ui'
 import { ref  } from 'vue'
+import CalculationsModal from './CalculationsModal.vue'
+import type { CalculationItem } from './CalculationsModal.vue'
+import { getNumberFields } from "~/composables/finance/calculationUtils"
 import type { ShowMunicipalFinancesEvent } from '@/types/events/showMunicipalFinancesEvent'
-import type { MunicipalFeature } from '@/types/http/gis'
+import type { MunicipalFeature, ParcelUploadResponse, ParcelFeature } from '@/types/http/gis'
+import type { MunicipalityFinance } from '@/types/http/finance'
 import { FrameType, type Frame } from '@/types/store/frames'
 import { useFinanceStore } from '@/stores/finance'
 
@@ -20,11 +26,30 @@ const emit = defineEmits<{
   (e: 'showCharts', mid: string, municipalName:string): void
 }>()
 
+const defaultParcelStyle = {
+  color: '#040203',
+  weight: 1,
+  opacity: 1,
+  fillOpacity: 0.1
+}
+
+
 const mapRef = ref<HTMLDivElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const message = ref('')
 const messageType = ref('success')
 const showMessage = ref(false)
+const parcelData = ref<ParcelUploadResponse | null>(null)
+const customParcels = ref<ParcelUploadResponse | null>(null)
+
+const showAnalysisModal = ref(false)
+const currentCalculation = ref<CalculationItem[]>([])
+
+const municipalFinances = computed(() => {
+  const finances = useFinanceStore().getMunicipalFinancesByMid(props.municipalBoundary.properties.mid)
+  return finances || []
+})
+
 let mapInstance: L.Map | null = null
 let municipalLayer: L.GeoJSON<any> | null = null
 let parcelLayer: L.GeoJSON<any> | null = null
@@ -40,18 +65,14 @@ function clearLayers() {
   }
 }
 
-function addParcelLayer(geojson: any) {
+function addParcelLayer(geojson: any, style: any, onEach?: any) {
   if (parcelLayer) {
     parcelLayer.remove()
   }
   if (mapInstance) {
     parcelLayer = L.geoJSON(geojson, {
-      style: () => ({
-        color: '#040203',
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.1
-      }),
+      style: typeof style === 'function' ? style : () => style,
+      onEachFeature: onEach || (() => {})
     }).addTo(mapInstance)
 
     if (municipalLayer) {
@@ -67,7 +88,7 @@ function addParcelLayer(geojson: any) {
 }
 
 function addMunicipalLayer() {
-  console.log(props.municipalBoundary)
+
   if (!mapInstance || !props.municipalBoundary) return
   clearLayers()
 
@@ -151,7 +172,8 @@ async function onFileSelected(event: Event) {
         messageType.value = 'error';
       } else if (response && 'features' in response) {
         message.value = 'Success';
-        addParcelLayer(response);
+        parcelData.value = response
+        addParcelLayer(response, defaultParcelStyle);
       } else {
         message.value = 'Upload failed';
         messageType.value = 'error';
@@ -161,6 +183,66 @@ async function onFileSelected(event: Event) {
       messageType.value = 'error'
     }
     setTimeout(() => showMessage.value = false, 10000)
+  }
+}
+
+async function updateParcelLayer() {
+
+}
+
+// Add function
+function applyCalculation(calc: CalculationItem[]) {
+  
+  try {
+    if (!calc || calc.length == 0) {
+      // If custom parcels previously applied, reset to normal parcel data with default styling
+      if (customParcels.value !== null) {
+
+        customParcels.value = null
+        addParcelLayer(parcelData.value, defaultParcelStyle)
+      }
+      return
+    }
+
+    if (!municipalFinances || !parcelData.value || !parcelData.value.features) {
+      return
+    }
+
+    // TODO: handle missing data for fields
+
+    // Create new parcel geojson list
+    const values: number[] = []
+    customParcels.value = parcelData.value
+
+    // Loop through all parcel features
+    customParcels.value.features.forEach((feature:any) => {
+      let expr = ''
+      calc.forEach(item => {
+        if (item.source === 'operator') expr += item.field
+        else if (item.source === 'finances') expr += municipalFinances.value[municipalFinances.value.length-1][item.field] || 0
+        else if (item.source === 'municipality') expr += props.municipalBoundary.properties[item.field] || 0
+        else if (item.source === 'parcelData') expr += feature.properties[item.field] || 0
+      })
+
+      const value = evaluate(expr)
+      feature.calculatedValue = value
+      values.push(value)
+    })
+
+    const colorScale = chroma.scale(["#F8C1B3","#ee6c4d", "#671C0A", "#1D0803"]).domain(chroma.limits(values, 'q', 15))
+
+    addParcelLayer(customParcels.value, 
+      (feature: any) => ({
+        color: "transparent",
+        fillColor: colorScale(feature.calculatedValue).hex(), 
+        fillOpacity: 0.85,
+        weight: 0
+      }),
+      (feature: any, layer: any) => { layer.bindTooltip(`Value: ${feature.calculatedValue.toFixed(2)}`) }
+    )
+  }
+  catch (ex) {
+    console.log(ex)
   }
 }
 
@@ -191,12 +273,19 @@ async function onFileSelected(event: Event) {
               class="flex w-full max-w-[610px] min-w-max rounded-lg bg-white shadow-sm border-2 border-neutral-400/65 overflow-clip"
               aria-label="Formatting options"
             >
-              <ToolbarButton
+              <ToolbarButton v-if="!parcelData"
                 class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
                 style="margin-left: auto"
                 @click=onClickAddParcelData
               >
                 Parcels
+              </ToolbarButton>
+              <ToolbarButton v-if="parcelData"
+                class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
+                style="margin-left: auto"
+                @click="showAnalysisModal = true"
+              >
+                Analysis
               </ToolbarButton>
               <ToolbarSeparator class="w-px bg-neutral-400/65" />
               <ToolbarButton
@@ -226,6 +315,15 @@ async function onFileSelected(event: Event) {
         </div>
     </template>
   </FinanceBaseFrame>
+  <CalculationsModal v-if="showAnalysisModal"
+    :datasets="{
+      'Municipal Finances': { source: 'finances', fields: getNumberFields(municipalFinances[0]) },
+      'Municipality' : { source: 'municipality', fields: getNumberFields(props.municipalBoundary.properties)},
+      'Parcels': { source: 'parcelData', fields: getNumberFields(parcelData?.features[0]?.properties) }
+    }"
+    :loadedCalc="currentCalculation"
+    @close="(calc:CalculationItem[]) => { showAnalysisModal = false; currentCalculation = calc; applyCalculation(calc) }"
+  />
 </template>
 
 <style scoped>
