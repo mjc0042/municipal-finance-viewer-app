@@ -66,7 +66,7 @@ const buttonText = computed(() =>
     :type="props.type"
     :disabled="props.disabled"
     :class="[buttonBase({ intent: props.intent, size: props.size, disabled: props.disabled }), props.classes]"
-    @click.prevent="handleClick"
+    @click="handleClick"
   >
     <slot />
   </button>
