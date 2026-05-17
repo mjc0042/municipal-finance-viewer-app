@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { TabsContent, TabsIndicator, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import { ref } from 'vue'
 import { financialApi } from '~/composables/api/financialApi'
-import { useAuthStore } from '~/stores/auth'
 import type { MissingData } from '~/types/http/missingData'
 
 const errorMessage = ref<string | null>('')
@@ -14,6 +12,7 @@ const isLoadingMarkdown = ref(false)
 const userInput = ref<string>('')
 const pdfUrl = ref<string>('')
 const isLoadingPdf = ref(false)
+const activeTab = ref<'markdown' | 'pdf'>('markdown')
 
 
 
@@ -22,7 +21,6 @@ onMounted(async () => {
   errorMessage.value = null
   
   try {
-    const authStore = useAuthStore()
     const data = await financialApi.getMissingFinanceData()
 
     const priorityOrder = { high: 1, medium: 2, low: 3 }
@@ -41,13 +39,20 @@ async function onClickDataRow(item: MissingData) {
   selectedItem.value = item
   markdownContent.value = ''
   userInput.value = ''
+  pdfUrl.value = ''
+  activeTab.value = 'markdown'
+}
+
+async function loadMarkdown() {
+  if (!selectedItem.value) return
+  
   isLoadingMarkdown.value = true
   
   try {
     markdownContent.value = await financialApi.getMissingDataPdfSegment(
-      item.municipality_id,
-      item.year,
-      item.pdf_page_indices[0] + ',' + item.pdf_page_indices[1]
+      selectedItem.value.municipality_id,
+      selectedItem.value.year,
+      selectedItem.value.pdf_page_indices[0] + ',' + selectedItem.value.pdf_page_indices[1]
     )
   } catch (ex: any) {
     markdownContent.value = `Error loading PDF content: ${ex.response?.data?.error || ex.message}`
@@ -69,6 +74,7 @@ function submitValue() {
 async function loadFullPdf() {
   if (!selectedItem.value) return
   
+  activeTab.value = 'pdf'
   isLoadingPdf.value = true
   pdfUrl.value = ''
   
@@ -83,6 +89,13 @@ async function loadFullPdf() {
     pdfUrl.value = ''
   } finally {
     isLoadingPdf.value = false
+  }
+}
+
+function switchTab(tab: 'markdown' | 'pdf') {
+  activeTab.value = tab
+  if (tab === 'pdf' && !pdfUrl.value) {
+    loadFullPdf()
   }
 }
 
@@ -156,47 +169,51 @@ function isSelected(item:MissingData):boolean {
                 <button @click="closePanel" class="text-gray-500 hover:text-gray-700">✕</button>
             </div>
 
-            <!-- Input and submit row -->
-            <div class="h-[80%] shrink-0 border-b border-gray-300">
-                <TabsRoot class="h-full flex flex-col" default-value="tab1">
-                    <div class="h-[10%] flex">
-                        <TabsList class="relative shrink-0 flex h-full p-4" aria-label="View options">
-                            <TabsIndicator class="absolute px-8 left-0 h-0.5 bottom-0 w-[--reka-tabs-indicator-size] translate-x-[--reka-tabs-indicator-position] translate-y-px rounded-full transition-[width,transform] duration-300">
-                              <div class="border border-b border-red-400 w-full h-full" />
-                            </TabsIndicator>
-                            <TabsTrigger
-                              class="bg-white px-5 flex-1 flex items-center justify-center text-sm leading-none text-mauve11 select-none rounded-tl-md hover:text-red-400 data-[state=active]:text-red-400 outline-none cursor-default focus-visible:relative focus-visible:shadow-[0_0_0_2px] focus-visible:shadow-black"
-                              value="tab1"
-                            >
-                            Markdown
-                            </TabsTrigger>
-                            <TabsTrigger
-                              class="bg-white px-5 flex-1 flex items-center justify-center text-sm leading-none text-mauve11 select-none rounded-tr-md hover:text-red-400 data-[state=active]:text-red-400 outline-none cursor-default focus-visible:relative focus-visible:shadow-[0_0_0_2px] focus-visible:shadow-black"
-                              value="tab2"
-                              @click="loadFullPdf"
-                              :disabled="isLoadingPdf"
-                            >
-                            {{ isLoadingPdf ? 'Loading...' : 'Full PDF' }}
-                            </TabsTrigger>
-                        </TabsList>
-                    </div>
-                    <div class="h-full">
-                        <TabsContent value="tab1" class="h-full p-4 overflow-y-scroll">
-                            <div v-if="isLoadingMarkdown" class="text-gray-500">Loading PDF content...</div>
-                            <div v-else v-html="markdownContent" class="prose max-w-none"></div>
-                        </TabsContent>
-                        <TabsContent value="tab2" class="h-full">
-                            <div v-if="pdfUrl" class="w-full h-full">
-                                <object :data="pdfUrl" type="application/pdf" class="w-full h-full"></object>
-                            </div>
-                            <div v-else class="flex items-center justify-center h-full text-gray-500">
-                                Click "Full PDF" tab to load PDF
-                            </div>
-                        </TabsContent>
-                    </div>
-                </TabsRoot>
+            <!-- Tab Buttons-->
+            <div class="h-[10%] shrink-0 border-b border-gray-300 flex">
+              <button 
+                class="flex-1 px-5 flex items-center justify-center text-sm font-medium transition-colors"
+                :class="activeTab === 'markdown' ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700'"
+                @click="switchTab('markdown')"
+              >
+                Markdown
+              </button>
+              <button 
+                class="flex-1 px-5 flex items-center justify-center text-sm font-medium transition-colors"
+                :class="activeTab === 'pdf' ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700'"
+                @click="switchTab('pdf')"
+                :disabled="isLoadingPdf"
+              >
+                {{ isLoadingPdf ? 'Loading...' : 'Full PDF' }}
+              </button>
             </div>
-            <!-- Row 4 (10%): Input and submit -->
+
+            <!-- Content -->
+            <div class="h-[70%] overflow-y-auto">
+              <!-- Markdown content -->
+              <div v-if="activeTab === 'markdown'" class="h-full p-4">
+                <div v-if="!markdownContent" class="flex items-center justify-center h-full">
+                  <button v-if="!isLoadingMarkdown"
+                    @click="loadMarkdown"
+                    class="px-6 py-3 bg-slate-600 text-white rounded hover:bg-slate-700"
+                  >Load Markdown for suspected pages containing table</button>
+                  <p v-else-if="isLoadingMarkdown" class="flex items-center justify-center h-full text-gray-500">Loading Markdown...</p>
+                </div>
+                <div v-else v-html="markdownContent" class="prose max-w-none"></div>
+              </div>
+              
+              <!-- PDF content -->
+              <div v-if="activeTab === 'pdf'" class="h-full">
+                <div v-if="pdfUrl" class="w-full h-full">
+                  <object :data="pdfUrl" type="application/pdf" class="w-full h-full"></object>
+                </div>
+                <div v-else class="flex items-center justify-center h-full text-gray-500">
+                  Click "Full PDF" tab to load
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 4: Input and submit -->
             <div class="flex gap-2 p-4 border-t border-gray-300 h-[10%] shrink-0 items-center bg-white">
                 <input 
                   v-model="userInput"
@@ -204,12 +221,7 @@ function isSelected(item:MissingData):boolean {
                   :placeholder="`Enter value for ${selectedItem.data_point}`"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded"
                 />
-                <button 
-                  @click="submitValue"
-                  class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                Submit
-                </button>
+                <BaseButton @click="submitValue" intent="primary">Submit</BaseButton>
             </div>
         </div>
     </div>
