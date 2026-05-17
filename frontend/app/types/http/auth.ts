@@ -15,4 +15,6 @@ export interface RegisterData {
     organization: string;
     subscriptionTier: string;
     credits: number;
+    is_staff: boolean;
+    is_superuser: boolean;
   }

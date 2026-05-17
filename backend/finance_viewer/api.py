@@ -11,6 +11,7 @@ from ninja import Router, File
 from ninja.files import UploadedFile
 from ninja_jwt.authentication import JWTAuth
 
+from .api_admin import admin_router
 from .lib.finance import (
     add_municipality,
     query_all_municipalities,
@@ -26,6 +27,7 @@ from .lib.parcels import handle_shapefile_upload
 from .lib.state_utils import get_state_abreviation
 from .models.municipal_finance import MunicipalFinances
 from .models.gis_boundaries import StateBoundaries
+from .permissions import admin_required
 from .schemas import (
     MunicipalityFinance,
     MunicipalityInfo,
@@ -38,6 +40,7 @@ from .schemas import (
 #from .fake_finance_modeller import generate_historic_financials
 
 router = Router()
+router.add_router("/admin", admin_router)
 
 @router.get("/gis/states", response=list[StateBoundaryResponse], auth=JWTAuth())
 def get_states(request):

@@ -12,7 +12,7 @@ export default defineNuxtConfig({
   ],
   vite: {
     plugins: [
-      tailwindcss(),
+      tailwindcss()
     ]
   },
   modules: [
@@ -22,7 +22,20 @@ export default defineNuxtConfig({
     '@nuxt/test-utils',
     '@pinia/nuxt',
     'pinia-plugin-persistedstate/nuxt',
+    'nuxt-security',
   ],
+  runtimeConfig: {
+    public: {
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000'
+    }
+  },
+  nitro: {
+    routeRules: {
+      '/media/**': {
+        proxy: `${process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000'}/media/**`
+      }
+    }
+  },
   piniaPluginPersistedstate: {
     //key: 'prefix_%id_postfix',
     storage: 'cookies',
@@ -34,4 +47,18 @@ export default defineNuxtConfig({
   routeRules: {
     '/financial': { ssr: false }
   },
+  security: {
+    headers: {
+      contentSecurityPolicy: {
+        'default-src': ["'self'"],
+        'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", "data:", "blob:"],
+        'connect-src': ["'self'", "http://localhost:8000", "ws://localhost:5173"],
+        'font-src': ["'self'", "data:"],
+        'frame-src': ["'self'", "http://localhost:8000", "data:", "blob:"],
+        'object-src': ["'self'", "http://localhost:8000", "data:", "blob:"]
+      }
+    }
+  }
 })

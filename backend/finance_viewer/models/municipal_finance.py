@@ -5,7 +5,27 @@
 #   * Make sure each ForeignKey and OneToOneField has `on_delete` set to the desired behavior
 #   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
-from django.db import models
+from django.contrib.gis.db import models
+
+
+class MissingData(models.Model):
+    gap_id = models.UUIDField(primary_key=True)
+    municipality_id = models.UUIDField()
+    year = models.IntegerField()
+    table_name = models.CharField(max_length=100)
+    data_point = models.CharField(max_length=200)
+    section_name = models.CharField(max_length=100)
+    priority = models.CharField(max_length=20)
+    status = models.CharField(max_length=20)
+    pdf_page_indices = models.TextField(blank=True, null=True)
+    markdown_context = models.TextField(blank=True, null=True)
+    timestamp = models.DateTimeField()
+    retry_count = models.IntegerField(blank=True, null=True)
+    error_message = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'missing_data'
 
 
 class MunicipalFinances(models.Model):
@@ -51,7 +71,7 @@ class MunicipalFinances(models.Model):
     debt_governmental_activities = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
     debt_business_activities = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
     debt_total_primary_government = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
-    general_obligation_bonds = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    direct_bonded_debt = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
     population = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
     per_capita_income = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
     principal_employers = models.TextField(blank=True, null=True)
@@ -68,6 +88,10 @@ class MunicipalFinances(models.Model):
     water_main_miles = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
     created_at = models.DateTimeField()
     modifier = models.CharField(max_length=10)
+    general_obligation_bonds = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    overlapping_bonded_debt = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    de_total = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    potholes_repaired = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False

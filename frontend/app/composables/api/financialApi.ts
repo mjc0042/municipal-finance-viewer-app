@@ -1,7 +1,10 @@
 import { apiClient } from '@/composables/api/apiClient';
+import type { User } from '~/types/http/auth';
 import type { ErrorResponse } from '~/types/http/common';
-import type { MunicipalFeature, StateBoundary, ParcelUploadResponse } from '~/types/http/gis';
+import type { ParcelUploadResponse } from '~/types/http/gis';
 import type { MunicipalityFinance, MunicipalityInfo } from '~/types/http/finance';
+import type { MissingData } from '~/types/http/missingData';
+
 
 export const financialApi = {
   getMunicipalityFinances: async (mid: string) => {
@@ -45,6 +48,37 @@ export const financialApi = {
         maxContentLength: 10000000 // 10MB
       }
     );
+    return response.data;
+  },
+  getMissingFinanceData: async () => {
+    const response = await apiClient.get<MissingData[]>(`/financial/admin/missing-data`);
+    return response.data;
+  },
+  getMissingDataPdfSegment: async (mid:string, year:number, pages:string) => {
+    const response = await apiClient.get(`/financial/admin/missing-data/pdf-segment`, {
+      params: { mid, year, pages }
+    });
+    return response.data;
+  },
+  getMissingDataFullPDF: async (mid: string, year: number) => {
+    const response = await apiClient.get(`/financial/admin/missing-data/pdf-full`, {
+      params: { mid, year },
+      responseType: 'blob'
+    });
+    //const runtimeConfig = useRuntimeConfig();
+    //return `${runtimeConfig.public.apiBase}${response.data.url}`;
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    return URL.createObjectURL(blob);
+  },
+  updateMissingDataValue: async (missingData: MissingData, newValue: string, newStatus: string) => {
+    const response = await apiClient.post(`/financial/admin/missing-data/update`, {
+      mid: missingData.municipality_id,
+      gapid: missingData.gap_id,
+      year: missingData.year,
+      field: missingData.data_point,
+      status: newStatus,
+      value: newValue
+    });
     return response.data;
   }
 };

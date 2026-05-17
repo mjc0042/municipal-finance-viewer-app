@@ -57,6 +57,7 @@ def register(request, payload: schemas.RegisterUserSchema):
 
 @api.get("/user", auth=JWTAuth())
 def get_user(request):
+    print("Get current user request", request)
     return {
         "id": request.user.id,
         "email": request.user.email,
