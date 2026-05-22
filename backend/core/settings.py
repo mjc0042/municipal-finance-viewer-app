@@ -107,7 +107,7 @@ DATABASES = {
         'PASSWORD': 'postgres123',
         'HOST': 'localhost'
     },
-    'municipal_finance': {
+    'municipal_finances': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'municipal_finance_viewer',
         'USER': 'mike',
