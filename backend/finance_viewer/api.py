@@ -12,6 +12,7 @@ from ninja.files import UploadedFile
 from ninja_jwt.authentication import JWTAuth
 
 from .api_admin import admin_router
+from .lib.common import DatabaseName
 from .lib.finance import (
     add_municipality,
     query_all_municipalities,
@@ -27,7 +28,6 @@ from .lib.parcels import handle_shapefile_upload
 from .lib.state_utils import get_state_abreviation
 from .models.municipal_finance import MunicipalFinances
 from .models.gis_boundaries import StateBoundaries
-from .permissions import admin_required
 from .schemas import (
     MunicipalityFinance,
     MunicipalityInfo,
@@ -46,7 +46,7 @@ router.add_router("/admin", admin_router)
 def get_states(request):
     """ API call for retrieving state boundaries """
 
-    qs = StateBoundaries.objects.using('gis_boundaries').all()
+    qs = StateBoundaries.objects.using(DatabaseName.GIS_BOUNDARIES).all()
     geojson = serialize("geojson", qs, geometry_field="geometry", fields=[
         "id", "statefp", "statens", "geoidfq", "geoid", "stusps", "name", "lsad", "aland", "awater"
     ])
