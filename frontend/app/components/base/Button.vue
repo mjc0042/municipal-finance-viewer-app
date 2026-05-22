@@ -21,8 +21,8 @@ const buttonBase = cva(
   {
     variants: {
       intent: {
-        primary: 'bg-slate-950 text-white hover:bg-slate-800',
-        secondary: 'bg-secondary-900 text-secondary-contrast hover:bg-secondary-800',
+        primary: 'bg-primary-500 text-white hover:bg-primary-800',
+        secondary: 'bg-secondary-700 text-white hover:bg-secondary-800',
         dark: 'bg-neutral-900 hover:bg-neutral-950 text-white',
         ghost: "bg-white hover:bg-neutral-200/75 drop-shadow-xs",
         outline: "border border-input bg-background",
