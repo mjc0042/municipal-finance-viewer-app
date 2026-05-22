@@ -2,6 +2,7 @@
 
 from django.db import connections
 
+from .common import DatabaseName
 from finance_viewer.models.municipal_finance import Municipalities, MunicipalFinances
 from finance_viewer.schemas import MunicipalityInfo, MunicipalityFinance
 
@@ -12,7 +13,7 @@ def query_all_municipalities() -> list[MunicipalityInfo]:
     Returns:
         (list) : List of all municipalities
     """
-    qs = Municipalities.objects.using('municipal_finance').all().values(
+    qs = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).all().values(
         'mid', 'name', 'state', 'county_fips'
     )
     data = []
@@ -41,7 +42,7 @@ def query_mid(name, state_abbr:str, county_fips:str) -> str | None:
     if not all([name, state_abbr, county_fips]):
         raise ValueError("")
 
-    with connections['municipal_finances'].cursor() as cursor:
+    with connections[DatabaseName.MUNICIPAL_FINANCES].cursor() as cursor:
         # Check if municipality exists
         cursor.execute("""
             SELECT mid FROM municipalities
@@ -65,7 +66,7 @@ def query_finances_for_municipality(mid:str) -> list[MunicipalityFinance]:
     if not mid or mid == '':
         raise ValueError("Unable to get finances for municipality. No mid provided.")
 
-    qs = MunicipalFinances.objects.using('municipal_finance').filter(mid=mid).order_by('year')
+    qs = MunicipalFinances.objects.using(DatabaseName.MUNICIPAL_FINANCES).filter(mid=mid).order_by('year')
     return list(qs.values()) #serialize('json', qs)
 
 def add_municipality(mid:str, municipality_name:str, state_abbr:str, county_fips:str):
@@ -78,7 +79,7 @@ def add_municipality(mid:str, municipality_name:str, state_abbr:str, county_fips
         state_abbr (str): State abbreviation
         county_fips (str): 5-digit county FIPS code
     """
-    with connections['municipal_finances'].cursor() as cursor:
+    with connections[DatabaseName.MUNICIPAL_FINANCES].cursor() as cursor:
         cursor.execute("""
             INSERT INTO municipalities (mid, name, state, county_fips)
             VALUES (%s, %s, %s, %s)
