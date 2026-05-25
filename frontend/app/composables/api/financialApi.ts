@@ -71,13 +71,30 @@ export const financialApi = {
     return URL.createObjectURL(blob);
   },
   updateMissingDataValue: async (missingData: MissingData, newValue: string, newStatus: string) => {
-    const response = await apiClient.post(`/financial/admin/missing-data/update`, {
+    const response = await apiClient.post(`/financial/admin/missing-data/update/value`, {
       mid: missingData.municipality_id,
       gapid: missingData.gap_id,
       year: missingData.year,
       field: missingData.data_point,
       status: newStatus,
       value: newValue
+    });
+    return response.data;
+  },
+  closeMissingData: async (missingData: MissingData) => {
+    const response = await apiClient.post(`/financial/admin/missing-data/close`, {
+      mid: missingData.municipality_id,
+      gapid: missingData.gap_id
+    });
+    return response.data;
+  },
+  updateMissingDataPages: async (missingData:MissingData, page_start:number, page_end:number) => {
+    const response = await apiClient.post(`/financial/admin/missing-data/update/pages`, {
+      mid: missingData.municipality_id,
+      gapid: missingData.gap_id,
+      year: missingData.year,
+      field: missingData.data_point,
+      pages: `${page_start},${page_end}`
     });
     return response.data;
   }

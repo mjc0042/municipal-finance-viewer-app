@@ -1,12 +1,14 @@
 """ Module for Finance Viewer API, admin endpoints """
+#pylint: disable=C0301,W0613,W0718
 
 import ast
+import json
 import os
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.http import FileResponse, JsonResponse
-from django.conf import settings
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from dotenv import load_dotenv
@@ -15,8 +17,15 @@ from ninja_jwt.authentication import JWTAuth
 from pypdf import PdfReader
 
 from .permissions import admin_required
-from .models.municipal_finance import MissingData, Municipalities
+from .lib.common import DatabaseName
+from .lib.finance_admin import (
+    update_missing_data_status,
+    update_missing_data_by_pages,
+    update_missing_data_by_value,
+)
+from .models.municipal_finance import MissingData, Municipalities, MunicipalFinances
 
+from common.database.models.missing_data import GapStatus
 from common.pdf.document_processor import DocumentProcessor
 from common.pdf.rotator import PDFRotator
 from common.pdf.split import split_pdf_pages
@@ -29,11 +38,11 @@ def get_missing_data(request):
     """Get all missing data records from the missing_data table"""
 
     try:
-        queryset = MissingData.objects.using('municipal_finance').all()
+        queryset = MissingData.objects.using(DatabaseName.MUNICIPAL_FINANCES).all()
 
         # Manually join since municipality_id is not a proper ForeignKey
         municipality_ids = [record.municipality_id for record in queryset]
-        municipalities = Municipalities.objects.using('municipal_finance').filter(
+        municipalities = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).filter(
             mid__in=municipality_ids
         )
         muni_map = {str(m.mid): m for m in municipalities}
@@ -77,7 +86,7 @@ def get_missing_data_pdf_segment(request, mid: str, year: int, pages: str):
         load_dotenv()
 
         # Get municipality info to build PDF path
-        muni = Municipalities.objects.using('municipal_finance').get(mid=mid)
+        muni = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).get(mid=mid)
         fips = muni.county_fips
         name = muni.name.lower().replace(' ', '_').title()
 
@@ -119,7 +128,7 @@ def get_missing_data_pdf_full(request, mid: str, year: int, ):
         load_dotenv()
 
         # Get municipality info to build PDF path
-        muni = Municipalities.objects.using('municipal_finance').get(mid=mid)
+        muni = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).get(mid=mid)
         fips = muni.county_fips
         name = muni.name.lower().replace(' ', '_').title()
 
@@ -139,3 +148,74 @@ def get_missing_data_pdf_full(request, mid: str, year: int, ):
     except Exception as e:
         print("Error getting markup for PDF.", str(e))
         return JsonResponse({ "success": False, "error": "Unable to retrieve full PDF"}, status=400)
+
+
+@admin_router.post("/missing-data/update/value", auth=JWTAuth())
+@admin_required
+def update_missing_data_value(request, mid: str, year: int, value: str, gap_id: str, data_point: str):
+    """ Update missing data field in finance data """
+
+    try:
+        user_id = str(request.user.id) if hasattr(request.user, 'id') else 'unknown'
+
+        update_missing_data_by_value(user_id, mid, year, data_point, gap_id, value)
+
+        return JsonResponse({"success": True, "message": "Updated successful"}, status=200)
+    except MunicipalFinances.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "error": "Municipality record not found"},
+            status=404
+        )
+    except MissingData.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "error": "Missing data record not found"},
+            status=404
+        )
+    except Exception as e:
+        print(f"Error updating missing data ({data_point}) value to ({value}).", str(e))
+        return JsonResponse({ "success": False, "error": "Unable to update value"}, status=400)
+
+@admin_router.post("/missing-data/close", auth=JWTAuth())
+@admin_required
+def close_missing_data_record(request, gap_id:str):
+    """ Close missing data record """
+
+    try:
+        update_missing_data_status(gap_id, GapStatus.CLOSED)
+
+    except Exception as e:
+        print(f"Error closing missing data record).", str(e))
+        return JsonResponse({ "success": False, "error": "Unable to close"}, status=400)
+
+@admin_router.post("/missing-data/update/pages", auth=JWTAuth())
+@admin_required
+def update_missing_data_page_indices(request):
+    """ Process update missing data by adding PDF page indices """
+
+    try:
+        print("Received page update...")
+        data = json.loads(request.body)
+        user_id = str(request.user.id) if hasattr(request.user, 'id') else 'unknown'
+
+        update_missing_data_by_pages(user_id,
+                                     data.pop("mid", None),
+                                     int(data.pop("year", None)),
+                                     data.pop("field", None),
+                                     data.pop("gapid", None),
+                                     data.pop("pages", None))
+        return JsonResponse({"success": True, "message": "Updated successful"}, status=200)
+    except MunicipalFinances.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "error": "Municipality record not found"},
+            status=404
+        )
+    except MissingData.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "error": "Missing data record not found"},
+            status=404
+        )
+    except Exception as e:
+        import traceback
+        print(f"Error processing missing data page update.", str(e))
+        traceback.print_exc()
+        return JsonResponse({ "success": False, "error": "Unable to process page update"}, status=400)

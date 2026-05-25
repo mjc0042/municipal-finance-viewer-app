@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import MissingData from '~/components/admin/MissingData.vue';
 import NavBar from '~/components/NavBar.vue';
 
 
@@ -10,7 +9,7 @@ import NavBar from '~/components/NavBar.vue';
     <NavBar class="shrink-0"/>
 
     <!-- Main content -->
-    <MissingData />
+    <AdminMissingDataBaseTable />
   </div>
 </template>
 
