@@ -6,7 +6,7 @@ authors = [
     {name = "mjc0042",email = "mjc0042@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.13,<4.0"
 dependencies = [
     "django (>=5.2.4,<6.0.0)",
     "django-ninja (>=1.4.3,<2.0.0)",
@@ -19,7 +19,8 @@ dependencies = [
     "fiona (>=1.10.1,<2.0.0)",
     "pypdf (>=5.6.0,<6.0.0)",
     "python-dotenv (>=1.1.1,<2.0.0)",
-    "common @ ../../municipal-finance-viewer/common"
+    "common @ ../../municipal-finance-viewer/common",
+    "pdf-parser @ ../../municipal-finance-viewer/pdf-parser",
 ]
 
 #[tool.poetry.dependencies]
