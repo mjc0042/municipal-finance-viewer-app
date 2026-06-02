@@ -11,9 +11,15 @@ const emit = defineEmits<{
   onClose: []
 }>()
 
+interface Message {
+  display:boolean
+  text: string
+  error: boolean
+}
+
+const resMsg = ref<Message>({display: false, text: "", error: false})
 const markdownContent = ref<string>('')
 const isLoadingMarkdown = ref(false)
-const userInput = ref<string>('')
 const pdfUrl = ref<string>('')
 const isLoadingPdf = ref(false)
 const activeTab = ref<'markdown' | 'pdf'>('markdown')
@@ -22,6 +28,9 @@ const activeSection = ref<'correctPdf' | 'updateValue' | 'closeIssue' | null>(nu
 const pdfStartPage = ref<number | null>(null)
 const pdfEndPage = ref<number | null>(null)
 const updateValue = ref<string>('')
+
+const runResult = ref<{ value: string; isVisible: boolean } | null>(null)
+const isRunning = ref(false)
 
 onMounted(async () => {})
 
@@ -49,8 +58,10 @@ function closePanel() {
   emit('onClose')
 }
 
-function submitValue() {
-  console.log('Submitting:', { item: props.selectedItem, value: userInput.value })
+function updateMessage(display:boolean, text:string, error:boolean) {
+  resMsg.value.display = display;
+  resMsg.value.text = text;
+  resMsg.value.error = error;
 }
 
 async function loadFullPdf() {
@@ -89,21 +100,53 @@ function toggleSection(section: 'correctPdf' | 'updateValue' | 'closeIssue') {
 async function runCorrectPdf() {
   if (!pdfStartPage.value || ! pdfEndPage.value) return
 
+  isRunning.value = true
+  runResult.value = null
+
   try {
-    await financialApi.updateMissingDataPages(props.selectedItem, pdfStartPage.value, pdfEndPage.value)
+    const response = await financialApi.updateMissingDataPages(props.selectedItem, pdfStartPage.value, pdfEndPage.value)
+    console.log("Received page update response:", response)
+    runResult.value = { value: response.value, isVisible: true }
   } catch (ex:any) {
-    console.log(ex)
+    updateMessage(true, ex.response?.data?.error || ex.message, true)
+  } finally {
+    isRunning.value = false
   }
 }
 
+function approveRunResult() {
+  if (runResult.value) {
+    updateValue.value = runResult.value.value
+    runResult.value = null
+    toggleSection('updateValue')
+    submitUpdateValue();
+  }
+}
+
+function dismissRunResult() {
+  runResult.value = null
+}
+
 function submitUpdateValue() {
-  console.log('Submitting update value:', updateValue.value)
-  // TODO: Implement value submission
+  try {
+    financialApi.updateMissingDataValue(props.selectedItem, updateValue.value);
+    updateMessage(true, "Value Updated", false)
+  } catch (ex:any) {
+    updateMessage(true, ex.response?.data?.error || ex.message, true)
+  }
 }
 
 function closeIssue() {
-  console.log('Closing issue:', props.selectedItem.gap_id)
-  // TODO: Implement close issue logic
+  try{
+    financialApi.closeMissingData(props.selectedItem);
+    updateMessage(true, "Issue Closed", false)
+  } catch (ex:any) {
+    updateMessage(true, ex.response?.data?.error || ex.message, true)
+  }
+}
+
+function clearErrorMessage() {
+  updateMessage(false, "", resMsg.value.error)
 }
 
 function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue') {
@@ -150,6 +193,14 @@ function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue')
 
     <!-- Content -->
     <div class="h-[70%] overflow-y-auto">
+        <!-- Response Message Box -->
+        <div v-if="resMsg && resMsg.display" 
+          class="flex items-center justify-center text-sm p-3 border-b border-neutral-300 shadow drop-shadow-md"
+          :class="resMsg.error ? 'text-red-400' : 'text-green-400'"
+          @click="clearErrorMessage">
+          {{ resMsg.text }}
+          <span class="mx-2 font-semibold cursor-pointer">x</span>
+        </div>
         <!-- Markdown content -->
         <div v-if="activeTab === 'markdown'" class="h-full p-4">
         <div v-if="!markdownContent" class="flex items-center justify-center h-full">
@@ -174,10 +225,11 @@ function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue')
     </div>
 
     <!-- Row 4: Update Functionality -->
-    <div class="h-[15%] shrink-0 bg-white border-y border-gray-300 p-2 flex gap-2 items-stretch">
+    <div class="h-[10%] shrink-0 bg-white border-y border-gray-300 p-2 flex gap-2 items-stretch">
         
         <!-- Correct PDF Pages Section -->
         <div 
+          class="relative"
           :class="getSectionClasses('correctPdf')"
           @click="toggleSection('correctPdf')"
         >
@@ -201,9 +253,31 @@ function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue')
               @click.stop="runCorrectPdf"
               intent="primary"
               class="px-3 py-1 text-sm"
+              :disabled="isRunning"
             >
-              Run
+              {{ isRunning ? 'Running...' : 'Run' }}
             </BaseButton>
+          </div>
+          <!-- Run Result Display -->
+          <div v-if="runResult && runResult.isVisible" class="flex absolute top-0 left-0 right-0 h-full p-1 bg-white shadow-md z-10 items-center justify-center">
+            <div class="text-xs text-gray-500 p-2">Result:</div>
+            <div class="text-sm font-mono bg-neutral-300 rounded-lg mr-3 p-1">{{ runResult.value }}</div>
+            <div class="flex gap-2">
+              <BaseButton 
+                @click.stop="approveRunResult"
+                intent="primary"
+                size="sm"
+              >
+                Approve
+              </BaseButton>
+              <BaseButton 
+                @click.stop="dismissRunResult"
+                intent="secondary"
+                size="sm"
+              >
+                Dismiss
+              </BaseButton>
+            </div>
           </div>
         </div>
 

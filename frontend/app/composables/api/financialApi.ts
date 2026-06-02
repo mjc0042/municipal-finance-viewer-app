@@ -70,13 +70,12 @@ export const financialApi = {
     const blob = new Blob([response.data], { type: 'application/pdf' });
     return URL.createObjectURL(blob);
   },
-  updateMissingDataValue: async (missingData: MissingData, newValue: string, newStatus: string) => {
+  updateMissingDataValue: async (missingData: MissingData, newValue: string) => {
     const response = await apiClient.post(`/financial/admin/missing-data/update/value`, {
       mid: missingData.municipality_id,
       gapid: missingData.gap_id,
       year: missingData.year,
       field: missingData.data_point,
-      status: newStatus,
       value: newValue
     });
     return response.data;
