@@ -12,6 +12,7 @@ const selectedItem = ref<MissingData | null>(null)
 const filterState = ref<string>('')
 const filterPriority = ref<string>('')
 const filterStatus = ref<string>('pending')
+const filterOptional = ref<boolean | null>(null)
 
 // Computed filtered data
 const filteredData = computed(() => {
@@ -19,7 +20,8 @@ const filteredData = computed(() => {
     const stateMatch = !filterState.value || item.state === filterState.value
     const priorityMatch = !filterPriority.value || item.priority === filterPriority.value
     const statusMatch = !filterStatus.value || item.status === filterStatus.value
-    return stateMatch && priorityMatch && statusMatch
+    const optionalMatch = filterOptional.value === null || item.optional === filterOptional.value
+    return stateMatch && priorityMatch && statusMatch && optionalMatch
   })
 })
 
@@ -43,6 +45,7 @@ function clearFilters() {
   filterState.value = ''
   filterPriority.value = ''
   filterStatus.value = ''
+  filterOptional.value = null
 }
 
 async function getMissingData() {
@@ -116,8 +119,16 @@ function isSelected(item:MissingData):boolean {
                         <option v-for="status in uniqueStatuses" :key="status" :value="status">{{ status }}</option>
                     </select>
                 </div>
+                <div class="flex items-center gap-2">
+                  <label class="text-sm text-neutral-600">Optional:</label>
+                  <select v-model="filterOptional" class="px-2 py-1 border border-gray-300 rounded text-sm">
+                    <option :value="null">All</option>
+                    <option :value="true">Optional Only</option>
+                    <option :value="false">Required Only</option>
+                  </select>
+                </div>
                 <button 
-                    v-if="filterState || filterPriority || filterStatus"
+                    v-if="filterState || filterPriority || filterStatus || filterOptional"
                     @click="clearFilters"
                     class="text-sm text-blue-600 hover:text-blue-800"
                 >

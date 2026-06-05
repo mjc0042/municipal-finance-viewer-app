@@ -169,7 +169,7 @@ function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue')
         <h2 class="font-semibold">{{ selectedItem.municipality_name }} - {{ selectedItem.year }}</h2>
         <span class="text-gray-500 text-sm">{{ selectedItem.data_point }}</span>
         </div>
-        <button @click="closePanel" class="text-gray-500 hover:text-gray-700">✕</button>
+        <button @click="closePanel" class="text-gray-500 hover:text-gray-700 cursor-pointer">✕</button>
     </div>
 
     <!-- Tab Buttons-->
@@ -196,7 +196,7 @@ function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue')
         <!-- Response Message Box -->
         <div v-if="resMsg && resMsg.display" 
           class="flex items-center justify-center text-sm p-3 border-b border-neutral-300 shadow drop-shadow-md"
-          :class="resMsg.error ? 'text-red-400' : 'text-green-400'"
+          :class="resMsg.error ? 'text-red-400' : 'text-green-700'"
           @click="clearErrorMessage">
           {{ resMsg.text }}
           <span class="mx-2 font-semibold cursor-pointer">x</span>

@@ -9,6 +9,7 @@ export interface MissingData {
     data_point: string;
     section_name: string;
     priority: string;
+    optional: boolean;
     status: string;
     pdf_page_indices: number[];
     markdown_context: string;
