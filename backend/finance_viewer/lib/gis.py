@@ -6,6 +6,7 @@ from django.core.serializers import serialize
 from django.db.models import Q
 from django.db.models.functions import Substr
 
+from .common import DatabaseName
 from finance_viewer.models.municipal_finance import Municipalities
 from finance_viewer.models.gis_boundaries import MunicipalBoundaries
 
@@ -17,7 +18,7 @@ def query_state_municipalities(state_abbr:str):
     Returns:
         Municipal Boundaries
     """
-    return Municipalities.objects.using('municipal_finance').filter(
+    return Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).filter(
         state=state_abbr.upper()
     ).values_list('county_fips', 'name', 'mid')
 
@@ -37,7 +38,7 @@ def query_state_municipal_boundaries(state_abbr:str, state_municipalities) -> ob
         condition2 |= Q(county_fips5=county_fips, municipal_name=name)
 
     # Query boundaries using combined conditions
-    qs = MunicipalBoundaries.objects.using('gis_boundaries').annotate(
+    qs = MunicipalBoundaries.objects.using(DatabaseName.GIS_BOUNDARIES).annotate(
         county_fips5=Substr('fips_code', 1, 5)
     ).filter(condition1 & condition2)
 
@@ -69,7 +70,7 @@ def query_municipality_boundary(mid):
         (object) : Municipal boundary spatial data
     """
 
-    municipality = Municipalities.objects.using('municipal_finance').filter(mid=mid).first()
+    municipality = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).filter(mid=mid).first()
 
     if not municipality:
         return None
@@ -78,7 +79,7 @@ def query_municipality_boundary(mid):
     state_abbr = municipality.state
     county_fips = municipality.county_fips
 
-    qs = MunicipalBoundaries.objects.using('gis_boundaries').annotate(
+    qs = MunicipalBoundaries.objects.using(DatabaseName.GIS_BOUNDARIES).annotate(
         county_fips5=Substr('fips_code', 1, 5)
     ).filter(
         state=state_abbr,
