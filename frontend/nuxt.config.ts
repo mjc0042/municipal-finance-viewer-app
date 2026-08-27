@@ -53,7 +53,7 @@ export default defineNuxtConfig({
         'default-src': ["'self'"],
         'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         'style-src': ["'self'", "'unsafe-inline'"],
-        'img-src': ["'self'", "data:", "blob:"],
+        'img-src': ["'self'", "data:", "blob:", "https://*.arcgisonline.com", "https://*.tile.openstreetmap.org", "https://tile.openstreetmap.org", "https://*.openstreetmap.org", "https://*.basemaps.cartocdn.com"],
         'connect-src': ["'self'", "http://localhost:8000", "ws://localhost:5173"],
         'font-src': ["'self'", "data:"],
         'frame-src': ["'self'", "http://localhost:8000", "data:", "blob:"],
