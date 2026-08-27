@@ -50,6 +50,7 @@ def get_missing_data_gaps() -> list:
             "data_point": record.data_point,
             "section_name": record.section_name,
             "priority": record.priority,
+            "optional": record.optional,
             "status": record.status,
             "pdf_page_indices": ast.literal_eval(record.pdf_page_indices),
             "markdown_context": record.markdown_context,

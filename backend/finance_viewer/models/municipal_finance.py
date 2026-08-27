@@ -22,6 +22,7 @@ class MissingData(models.Model):
     timestamp = models.DateTimeField()
     retry_count = models.IntegerField(blank=True, null=True)
     error_message = models.TextField(blank=True, null=True)
+    optional = models.BooleanField()
 
     class Meta:
         managed = False
