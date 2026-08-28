@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import chroma from 'chroma-js'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ToolbarButton, ToolbarRoot, ToolbarSeparator } from 'reka-ui'
 import type { StateBoundary, MunicipalFeature, MunicipalBoundaryCollection } from '@/types/http/gis'
+import type { CompareResult, YearMode } from '@/types/http/finance'
 import { useFinanceStore } from '@/stores/finance'
 import { useFramesStore } from '@/stores/frames'
+import { financialApi } from '@/composables/api/financialApi'
+import { getNumberFields } from '~/composables/finance/calculationUtils'
+import CalculationsModal from './CalculationsModal.vue'
+import type { CalculationItem } from './CalculationsModal.vue'
 import 'leaflet/dist/leaflet.css'
 import L, { map } from 'leaflet'
 import type { SelectMunicipalityEvent } from '@/types/events/selectMunicipalityEvent'
@@ -39,6 +46,151 @@ const municipalBoundaryView = ref(false)
 function toggleBoundaryView(sView:boolean, mView:boolean) {
   stateBoundaryView.value = sView
   municipalBoundaryView.value = mView
+}
+
+// -------------- Comparison state (component-local) ------------------------
+const showCompareModal = ref(false)
+const currentCalculation = ref<CalculationItem[]>([])
+const currentYearMode = ref<YearMode>('latest')
+const activeComparison = ref<CompareResult[]>([])
+const compareMessage = ref('')
+const compareMessageType = ref('success')
+const showCompareMessage = ref(false)
+const financesFieldsCache = ref<string[] | null>(null)
+
+const compareFieldList = computed(() => {
+  const municipalBoundaries = selectedState.value
+    ? financeStore.getStateMunicipalBoundariesList(selectedState.value.code)
+    : []
+  return {
+    'Municipal Finances': { source: 'finances', fields: financesFieldsCache.value ?? [] },
+    'Municipality': { source: 'municipality', fields: getNumberFields(municipalBoundaries[0]?.properties) }
+  }
+})
+
+async function onOpenCompare() {
+  if (!selectedState.value) return
+
+  // Derive finance field list from one municipality's finances, cached per session
+  if (!financesFieldsCache.value) {
+    const municipalBoundaries = financeStore.getStateMunicipalBoundariesList(selectedState.value.code)
+    const firstWithMid = municipalBoundaries.find(f => f.properties.mid)
+    if (firstWithMid?.properties.mid) {
+      // Fetch (or reuse cached) finances for one municipality, then derive numeric fields
+      await financeStore.setSelectedMunicipality(
+        'compare-field-derivation', selectedState.value.code,
+        firstWithMid.id ?? -1, firstWithMid.properties.mid)
+      const finances = financeStore.getMunicipalFinancesByMid(firstWithMid.properties.mid)
+      const fields = finances && finances.length > 0 ? getNumberFields(finances[0]) : null
+      if (fields && fields.length > 0) {
+        financesFieldsCache.value = fields
+      } else {
+        showCompareError('Unable to derive available finance fields')
+        return
+      }
+    } else {
+      showCompareError('No finance data available for this state')
+      return
+    }
+  }
+
+  showCompareModal.value = true
+}
+
+function showCompareError(msg: string) {
+  compareMessage.value = msg
+  compareMessageType.value = 'error'
+  showCompareMessage.value = true
+  setTimeout(() => showCompareMessage.value = false, 10000)
+}
+
+function calcToTokenString(calc: CalculationItem[]): string {
+  return calc.map(item =>
+    item.source === 'operator' ? item.field : `${item.source}:${item.field}`
+  ).join(',')
+}
+
+async function applyComparison(calc: CalculationItem[]) {
+  showCompareModal.value = false
+  currentCalculation.value = calc
+
+  if (!calc || calc.length === 0 || !selectedState.value) {
+    clearComparison()
+    return
+  }
+
+  try {
+    const results = await financialApi.compareStateMunicipalities(
+      selectedState.value.abbr,
+      calcToTokenString(calc),
+      currentYearMode.value
+    )
+    activeComparison.value = results
+    renderComparison()
+  } catch (e: unknown) {
+    const detail = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    showCompareError(detail || 'Comparison failed')
+    clearComparison()
+  }
+}
+
+function clearComparison() {
+  activeComparison.value = []
+  currentCalculation.value = []
+  if (municipalLayer) {
+    municipalLayer.setStyle({
+      color: '#2c3e50',
+      weight: 1.5,
+      opacity: 1,
+      fillOpacity: 0.3
+    })
+    municipalLayer.eachLayer((layer: { unbindTooltip: () => void }) => {
+      layer.unbindTooltip()
+    })
+  }
+}
+
+async function toggleYearMode() {
+  currentYearMode.value = currentYearMode.value === 'latest' ? 'shared' : 'latest'
+  if (currentCalculation.value.length) {
+    await applyComparison(currentCalculation.value)
+  }
+}
+
+function renderComparison() {
+  if (!municipalLayer || !activeComparison.value.length) return
+
+  const valueByMid = new Map(activeComparison.value.map(r => [r.mid, r.value]))
+
+  const values = activeComparison.value.map(r => r.value)
+  const colorScale = chroma.scale(["#F8C1B3", "#ee6c4d", "#671C0A", "#1D0803"])
+    .domain(chroma.limits(values, 'q', 15))
+
+  municipalLayer.setStyle((feature?: { properties?: { mid?: string } }) => {
+    const mid = feature?.properties?.mid
+    const value = mid ? valueByMid.get(mid) : undefined
+    if (value === undefined) {
+      return {
+        color: '#2c3e50',
+        weight: 1.5,
+        opacity: 1,
+        fillOpacity: 0.3
+      }
+    }
+    return {
+      color: 'transparent',
+      fillColor: colorScale(value).hex(),
+      fillOpacity: 0.85,
+      weight: 0
+    }
+  })
+
+  municipalLayer.eachLayer((layer: { feature?: { properties?: { mid?: string } }, unbindTooltip: () => void, bindTooltip: (t: string) => void }) => {
+    layer.unbindTooltip()
+    const mid = layer.feature?.properties?.mid
+    const value = mid ? valueByMid.get(mid) : undefined
+    layer.bindTooltip(value !== undefined ? `Value: ${value.toFixed(2)}` : 'No data')
+  })
 }
 
 // -------------- Leaflet features ------------------------
@@ -140,6 +292,11 @@ function addMunicipalLayer() {
   if (bounds.isValid()) {
     mapInstance?.fitBounds(bounds.pad(0.1))
   }
+
+  // Re-apply an active comparison after a layer rebuild
+  if (activeComparison.value.length) {
+    renderComparison()
+  }
 }
 
 function onResize(size: { width: number; height: number }) {
@@ -184,6 +341,15 @@ watch(
   }
 )
 
+// Reset comparison when a different state is selected
+watch(selectedState, (newState, oldState) => {
+  if (oldState && newState !== oldState) {
+    financesFieldsCache.value = null
+    currentYearMode.value = 'latest'
+    clearComparison()
+  }
+})
+
 onUnmounted(() => {
   if (mapInstance) {
     mapInstance.remove()
@@ -207,9 +373,46 @@ onUnmounted(() => {
                 :style="{ width: size.width + 'px', height: size.height + 'px' }"
                 ref="mapRef"
             />
+            <div v-if="showCompareMessage" :class="compareMessageType === 'error' ? 'text-red-500' : 'text-blue-500'" class="absolute top-10 right-4 p-2 text-sm bg-white shadow-lg shadow-neutral-500 border border-gray-300 rounded z-50">
+              {{ compareMessage }}
+            </div>
+
+            <!-- Buttons Container -->
+            <div v-if="municipalBoundaryView && selectedState" class="absolute bottom-0 left-0 mb-7 ml-2.5 flex z-20">
+              <ToolbarRoot
+                class="flex w-full max-w-[610px] min-w-max rounded-lg bg-white shadow-sm border-2 border-neutral-400/65 overflow-clip"
+                aria-label="Map frame options"
+              >
+                <ToolbarButton
+                  class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
+                  @click="onOpenCompare"
+                >
+                  Compare
+                </ToolbarButton>
+                <ToolbarButton v-if="activeComparison.length"
+                  class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
+                  @click="clearComparison"
+                >
+                  Clear
+                </ToolbarButton>
+                <ToolbarSeparator v-if="activeComparison.length" class="w-px bg-neutral-400/65" />
+                <ToolbarButton v-if="activeComparison.length"
+                  class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
+                  :title="'Year mode: ' + currentYearMode + ' (click to switch)'"
+                  @click="toggleYearMode"
+                >
+                  Year: {{ currentYearMode === 'shared' ? 'shared' : 'latest' }}
+                </ToolbarButton>
+              </ToolbarRoot>
+            </div>
         </div>
     </template>
   </FinanceBaseFrame>
+  <CalculationsModal v-if="showCompareModal"
+    :datasets="compareFieldList"
+    :loadedCalc="currentCalculation"
+    @close="(calc:CalculationItem[]) => applyComparison(calc)"
+  />
 </template>
 
 <style scoped>

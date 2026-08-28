@@ -69,6 +69,27 @@ def query_finances_for_municipality(mid:str) -> list[MunicipalityFinance]:
     qs = MunicipalFinances.objects.using(DatabaseName.MUNICIPAL_FINANCES).filter(mid=mid).order_by('year')
     return list(qs.values()) #serialize('json', qs)
 
+def query_state_finances(state_abbr:str) -> dict[str, list[dict]]:
+    """ Get all financial data for a state's municipalities
+
+    Args:
+        state_abbr (str): 2-letter State Abbreviation i.e. CA
+    Returns:
+        (dict): Map of mid to list of financial data sorted by year
+    """
+    if not state_abbr or state_abbr == '':
+        raise ValueError("Unable to get finances for state. No state abbreviation provided.")
+
+    qs = MunicipalFinances.objects.using(DatabaseName.MUNICIPAL_FINANCES).filter(
+        mid__state=state_abbr.upper()
+    ).order_by('mid', 'year').values()
+
+    finances_by_mid: dict[str, list[dict]] = {}
+    for row in qs:
+        mid = str(row['mid_id'])
+        finances_by_mid.setdefault(mid, []).append(row)
+    return finances_by_mid
+
 def add_municipality(mid:str, municipality_name:str, state_abbr:str, county_fips:str):
     """
     Add municipality information

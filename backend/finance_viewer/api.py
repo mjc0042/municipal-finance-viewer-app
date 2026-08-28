@@ -4,6 +4,7 @@
 
 import json
 import uuid
+from decimal import InvalidOperation
 
 from django.core.serializers import serialize
 from django.http import JsonResponse
@@ -13,11 +14,19 @@ from ninja_jwt.authentication import JWTAuth
 
 from .api_admin import admin_router
 from .lib.common import DatabaseName
+from .lib.calculation import (
+    CalculationError,
+    build_expression,
+    evaluate_calculation,
+    numeric_or_none,
+    parse_calc_token_string
+)
 from .lib.finance import (
     add_municipality,
     query_all_municipalities,
     query_finances_for_municipality,
-    query_mid
+    query_mid,
+    query_state_finances
 )
 from .lib.gis import (
     query_municipality_boundary,
@@ -33,7 +42,8 @@ from .schemas import (
     MunicipalityInfo,
     MunicipalBoundaryResponse,
     ParcelUploadResponse,
-    StateBoundaryResponse
+    StateBoundaryResponse,
+    CompareResult
 )
 
 # TODO: Remove
@@ -107,6 +117,86 @@ def get_municipality_list(request):
     except Exception as e:
         print(e)
         return JsonResponse({"success": False, "error": "Unable to fetch municipalities"}, status=400)
+
+
+@router.get("/state/municipalities/compare", response=list[CompareResult], auth=JWTAuth())
+def compare_state_municipalities(request, state_abbr:str, calc:str, year_mode:str = "latest"):
+    """ Evaluate a calculation for every municipality in a state
+
+        Args:
+            state_abbr (str): 2-letter State Abbreviation i.e. CA
+            calc (str): Comma-separated calculation tokens, data points as source:field
+            year_mode (str): "latest" (default) or "shared"
+    """
+
+    if year_mode not in ("latest", "shared"):
+        return JsonResponse({"success": False, "error": "year_mode must be 'latest' or 'shared'"}, status=400)
+
+    try:
+        items = parse_calc_token_string(calc)
+    except CalculationError as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=400)
+
+    try:
+        finances_by_mid = query_state_finances(state_abbr)
+    except Exception as e:
+        print(e)
+        return JsonResponse({"success": False, "error": "Unable to retrieve state finances"}, status=400)
+
+    if not finances_by_mid:
+        return []
+
+    # Municipality properties resolved from the state's municipal boundaries, keyed by mid
+    municipality_props_by_mid: dict[str, dict] = {}
+    available_munis_qs = query_state_municipalities(state_abbr.upper())
+    muni_lookup = {(county_fips, name): mid for county_fips, name, mid in available_munis_qs}
+    for feature in query_state_municipal_boundaries(state_abbr.upper(), available_munis_qs)['features']:
+        props = feature['properties']
+        county_fips5 = props.get('county_fips', '')[:5] or props.get('fips_code', '')[:5]
+        mid = muni_lookup.get((county_fips5, props['municipal_name']))
+        if mid:
+            municipality_props_by_mid[str(mid)] = props
+
+    # Determine per-municipality finance record according to year mode
+    if year_mode == "shared":
+        # Newest year present for every municipality that has any finance data
+        year_sets = [set(r['year'] for r in records) for records in finances_by_mid.values()]
+        common_years = set.intersection(*year_sets) if year_sets else set()
+        shared_year = max(common_years) if common_years else None
+    else:
+        shared_year = None
+
+    results: list[CompareResult] = []
+    for mid, records in finances_by_mid.items():
+        if year_mode == "shared":
+            if shared_year is None:
+                continue
+            year_records = [r for r in records if r['year'] == shared_year]
+            if not year_records:
+                continue
+            record = year_records[0]
+            year_used = shared_year
+        else:
+            record = records[-1]
+            year_used = record['year']
+
+        municipality_props = municipality_props_by_mid.get(mid, {})
+
+        values = {
+            'finances': record,
+            'municipality': municipality_props
+        }
+
+        try:
+            expression = build_expression(items, values)
+            value = evaluate_calculation(expression)
+            if value != value:  # NaN guard
+                continue
+            results.append(CompareResult(mid=mid, value=value, year=year_used))
+        except (KeyError, TypeError, ZeroDivisionError, CalculationError, InvalidOperation):
+            continue
+
+    return results
 
 
 @router.post("/municipality/finances/add/year")

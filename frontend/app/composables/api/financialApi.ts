@@ -2,7 +2,7 @@ import { apiClient } from '@/composables/api/apiClient';
 import type { User } from '~/types/http/auth';
 import type { ErrorResponse } from '~/types/http/common';
 import type { ParcelUploadResponse } from '~/types/http/gis';
-import type { MunicipalityFinance, MunicipalityInfo } from '~/types/http/finance';
+import type { MunicipalityFinance, MunicipalityInfo, CompareResult, YearMode } from '~/types/http/finance';
 import type { MissingData } from '~/types/http/missingData';
 
 
@@ -11,6 +11,13 @@ export const financialApi = {
     const response = await apiClient.get<MunicipalityFinance[]>(
       `/financial/municipality/finances`,
       { params: { mid } }
+    );
+    return response.data;
+  },
+  compareStateMunicipalities: async (stateAbbr: string, calc: string, yearMode: YearMode = 'latest') => {
+    const response = await apiClient.get<CompareResult[]>(
+      `/financial/state/municipalities/compare`,
+      { params: { state_abbr: stateAbbr, calc, year_mode: yearMode } }
     );
     return response.data;
   },

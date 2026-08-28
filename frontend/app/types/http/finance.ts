@@ -77,3 +77,11 @@ export interface MunicipalityInfo {
   state: string;
   county_fips: string;
 }
+
+export interface CompareResult {
+  mid: string;
+  value: number;
+  year: number;
+}
+
+export type YearMode = 'latest' | 'shared'

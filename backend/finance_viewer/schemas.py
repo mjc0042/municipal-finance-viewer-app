@@ -120,6 +120,11 @@ class MunicipalityInfo(Schema):
     state: str
     county_fips: Optional[str]
 
+class CompareResult(Schema):
+    mid: str
+    value: float
+    year: int
+
 class ParcelFeatureProperties(Schema):
     objectid: str
     taxpin: str
