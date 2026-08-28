@@ -2,6 +2,7 @@
 
 import ast
 import os
+import markdown
 
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -13,12 +14,13 @@ from finance_viewer.models.municipal_finance import MissingData, MunicipalFinanc
 from finance_viewer.models.user_updates import UserFinanceUpdatesLog
 
 from common.database.models.missing_data import GapStatus
-#from common.database.models.municipal_finances import ModifierType
 from common.pdf.document_processor import DocumentProcessor
-from common.pdf.file_manager import get_pdf_path, get_staging_dir
+from common.pdf.file_manager import get_pdf_path
+from common.pdf.pdf_reader import PdfDocumentReader
 from common.pdf.rotator import PDFRotator
 from common.pdf.split import split_pdf_pages
-from pdf_parser.parse.partial_parser import extract_text_from_pages, analyze_field_from_text
+from pdf_parser.extraction.text_extractor import PDFTextExtractor
+from pdf_parser.parse.partial_parser import analyze_field_from_pages
 
 def get_missing_data_gaps() -> list:
     """
@@ -61,32 +63,52 @@ def get_missing_data_gaps() -> list:
     return data
 
 def get_markdown_from_pdf_segment(mid:str, year:int, page_indices:str) -> str:
-    """ Get PDF segment 
-    
+    """ Get PDF segment as simple markdown (pymupdf4llm)
+
     Args:
         mid (str): Municipality ID
         year (int): PDF year
         page_indices (str): Comma-joined page indices i.e. 1,2
     Returns:
-        str : PDF segment markdown
+        str : PDF segment markdown rendered as HTML
     Raises:
         FileNotFoundError: If PDF does not exist.
     """
     load_dotenv()
 
-    # Get municipality info to build PDF path
-    muni = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).get(mid=mid)
-    fips = muni.county_fips
-    name = muni.name.lower().replace(' ', '_').title()
+    pdf_path = _resolve_pdf_path(mid, year)
 
-    pdf_path = Path(os.getenv("DOWNLOADS_DIR")) / f"acfr_{fips}_{name}_{year}.pdf"
+    start_page, end_page = _parse_page_indices(page_indices)
 
-    if not pdf_path.exists():
-        raise FileNotFoundError("PDF not found")
+    temp_pdf_file = split_pdf_pages(PdfReader(pdf_path), os.getenv("STAGING_DIR"), start_page, end_page)
+    temp_pdf_file = PDFRotator().orient_pdf(temp_pdf_file, remove_old_file=True)
 
-    page_parts = page_indices.split(',')
-    start_page = int(page_parts[0])
-    end_page = int(page_parts[1]) if len(page_parts) > 1 else start_page
+    extractor = PDFTextExtractor()
+    markdown_result = extractor.extract_simple_markdown(temp_pdf_file, 0, (end_page - start_page))
+
+    if os.path.exists(temp_pdf_file):
+        os.remove(temp_pdf_file)
+
+    return markdown.markdown(markdown_result, extensions=['extra'])
+
+
+def get_alt_markdown_from_pdf_segment(mid:str, year:int, page_indices:str) -> str:
+    """ Get PDF segment as markdown using Docling (alternative extractor)
+
+    Args:
+        mid (str): Municipality ID
+        year (int): PDF year
+        page_indices (str): Comma-joined page indices i.e. 1,2
+    Returns:
+        str : PDF segment markdown rendered as HTML
+    Raises:
+        FileNotFoundError: If PDF does not exist.
+    """
+    load_dotenv()
+
+    pdf_path = _resolve_pdf_path(mid, year)
+
+    start_page, end_page = _parse_page_indices(page_indices)
 
     temp_pdf_file = split_pdf_pages(PdfReader(pdf_path), os.getenv("STAGING_DIR"), start_page, end_page)
     temp_pdf_file = PDFRotator().orient_pdf(temp_pdf_file, remove_old_file=True)
@@ -99,6 +121,38 @@ def get_markdown_from_pdf_segment(mid:str, year:int, page_indices:str) -> str:
         os.remove(temp_pdf_file)
 
     return markdown_result
+
+
+def _resolve_pdf_path(mid:str, year:int) -> Path:
+    """
+    Resolve the PDF path for a municipality/year, raising if missing.
+    
+    Args:
+        mid (str): Municipality ID
+        year (int): Year
+    Returns:
+        (Path): Path to PDF
+    """
+    muni = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).get(mid=mid)
+
+    pdf_path = get_pdf_path(
+        muni.county_fips,
+        muni.name,
+        year,
+        os.getenv("DOWNLOADS_DIR"))
+
+    if not pdf_path.exists():
+        raise FileNotFoundError("PDF not found")
+
+    return pdf_path
+
+
+def _parse_page_indices(page_indices:str) -> tuple[int, int]:
+    """ Parse a comma-joined page index string into (start, end). """
+    page_parts = page_indices.split(',')
+    start_page = int(page_parts[0])
+    end_page = int(page_parts[1]) if len(page_parts) > 1 else start_page
+    return start_page, end_page
 
 
 def update_missing_data_by_value(
@@ -185,20 +239,21 @@ def update_missing_data_by_pages(mid:str, year:int, field_name:str, gap_id:str, 
 
     muncipalities = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).get(mid=mid)
 
-    # Get PDF text
-    reader = PdfReader(get_pdf_path(muncipalities.county_fips, muncipalities.name, year, directory=os.getenv("DOWNLOADS_DIR")))
+    pdf_path = get_pdf_path(muncipalities.county_fips, muncipalities.name, year, directory=os.getenv("DOWNLOADS_DIR"))
 
-    if start_index >= reader.get_num_pages()-1 or end_index >=reader.get_num_pages()-1:
+    reader = PdfDocumentReader(pdf_path)
+    if start_index >= reader.get_num_pages()-1 or end_index >= reader.get_num_pages()-1:
         raise ValueError("Pages not specified correctly.")
 
-    text = extract_text_from_pages(
-        reader,
-        str(get_staging_dir()),
+    new_value = analyze_field_from_pages(
+        field_name,
+        muncipalities.state,
+        muncipalities.name,
+        year,
+        pdf_path,
         start_index,
         end_index
     )
-
-    new_value = analyze_field_from_text(field_name, muncipalities.state, muncipalities.name, year, text)
 
     # Update missing data table
     record = update_missing_data_status(gap_id, GapStatus.IN_PROGRESS)

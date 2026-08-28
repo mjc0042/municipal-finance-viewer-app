@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { financialApi } from '~/composables/api/financialApi'
 import type { MissingData } from '~/types/http/missingData'
 
@@ -20,6 +20,7 @@ interface Message {
 const resMsg = ref<Message>({display: false, text: "", error: false})
 const markdownContent = ref<string>('')
 const isLoadingMarkdown = ref(false)
+const isLoadingAlternativeMarkdown = ref(false)
 const pdfUrl = ref<string>('')
 const isLoadingPdf = ref(false)
 const activeTab = ref<'markdown' | 'pdf'>('markdown')
@@ -34,13 +35,20 @@ const isRunning = ref(false)
 
 onMounted(async () => {})
 
+watch(() => props.selectedItem, () => {
+  markdownContent.value = ''
+  if (activeTab.value === 'markdown') {
+    loadMarkdown()
+  }
+}, { immediate: true })
+
 async function loadMarkdown() {
   if (!props.selectedItem) return
-  
+
   isLoadingMarkdown.value = true
-  
+
   try {
-    markdownContent.value = await financialApi.getMissingDataPdfSegment(
+    markdownContent.value = await financialApi.getMissingDataMarkdown(
       props.selectedItem.municipality_id,
       props.selectedItem.year,
       props.selectedItem.pdf_page_indices[0] + ',' + props.selectedItem.pdf_page_indices[1]
@@ -49,6 +57,24 @@ async function loadMarkdown() {
     markdownContent.value = `Error loading PDF content: ${ex.response?.data?.error || ex.message}`
   } finally {
     isLoadingMarkdown.value = false
+  }
+}
+
+async function loadAlternativeMarkdown() {
+  if (!props.selectedItem) return
+
+  isLoadingAlternativeMarkdown.value = true
+
+  try {
+    markdownContent.value = await financialApi.getMissingDataAltMarkdown(
+      props.selectedItem.municipality_id,
+      props.selectedItem.year,
+      props.selectedItem.pdf_page_indices[0] + ',' + props.selectedItem.pdf_page_indices[1]
+    )
+  } catch (ex: any) {
+    markdownContent.value = `Error loading PDF content: ${ex.response?.data?.error || ex.message}`
+  } finally {
+    isLoadingAlternativeMarkdown.value = false
   }
 }
 
@@ -203,14 +229,20 @@ function getSectionClasses(section: 'correctPdf' | 'updateValue' | 'closeIssue')
         </div>
         <!-- Markdown content -->
         <div v-if="activeTab === 'markdown'" class="h-full p-4">
-        <div v-if="!markdownContent" class="flex items-center justify-center h-full">
-            <button v-if="!isLoadingMarkdown"
-            @click="loadMarkdown"
-            class="px-6 py-3 bg-slate-600 text-white rounded hover:bg-slate-700"
-            >Load Markdown for suspected pages containing table</button>
-            <p v-else-if="isLoadingMarkdown" class="flex items-center justify-center h-full text-gray-500">Loading Markdown...</p>
+        <div v-if="!markdownContent && !isLoadingMarkdown" class="flex items-center justify-center h-full">
+            <p class="text-gray-500">No markdown content available.</p>
         </div>
-        <div v-else v-html="markdownContent" class="prose max-w-none"></div>
+        <p v-else-if="isLoadingMarkdown" class="flex items-center justify-center h-full text-gray-500">Loading Markdown...</p>
+        <div v-else>
+            <div class="flex justify-end mb-2">
+                <button v-if="!isLoadingAlternativeMarkdown"
+                    @click="loadAlternativeMarkdown"
+                    class="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700 text-sm"
+                    >Load Alternative Markdown (Docling)</button>
+                <p v-else class="text-gray-500 text-sm">Loading Alternative Markdown...</p>
+            </div>
+            <div v-html="markdownContent" class="prose max-w-none"></div>
+        </div>
         </div>
         
         <!-- PDF content -->

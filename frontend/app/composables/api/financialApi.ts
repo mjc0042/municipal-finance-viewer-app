@@ -54,8 +54,14 @@ export const financialApi = {
     const response = await apiClient.get<MissingData[]>(`/financial/admin/missing-data`);
     return response.data;
   },
-  getMissingDataPdfSegment: async (mid:string, year:number, pages:string) => {
+  getMissingDataMarkdown: async (mid:string, year:number, pages:string) => {
     const response = await apiClient.get(`/financial/admin/missing-data/pdf-segment`, {
+      params: { mid, year, pages }
+    });
+    return response.data;
+  },
+  getMissingDataAltMarkdown: async (mid:string, year:number, pages:string) => {
+    const response = await apiClient.get(`/financial/admin/missing-data/pdf-segment-alternative`, {
       params: { mid, year, pages }
     });
     return response.data;

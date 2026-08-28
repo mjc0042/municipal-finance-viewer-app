@@ -19,6 +19,7 @@ from .lib.common import DatabaseName
 from .models.municipal_finance import MissingData, Municipalities, MunicipalFinances
 
 from common.database.models.missing_data import GapStatus
+from common.pdf.file_manager import get_pdf_path
 
 admin_router = Router()
 
@@ -39,7 +40,7 @@ def get_missing_data(request):
 @admin_router.get("/missing-data/pdf-segment", auth=JWTAuth())
 @admin_required
 def get_missing_data_pdf_segment(request, mid: str, year: int, pages: str):
-    """ Get PDF part for the missing data """
+    """ Get PDF part for the missing data as simple markdown """
 
     try:
         return JsonResponse(
@@ -58,22 +59,41 @@ def get_missing_data_pdf_segment(request, mid: str, year: int, pages: str):
             "error": "Unable to retrieve PDF segment for the data point"
         }, status=400)
 
+@admin_router.get("/missing-data/pdf-segment-alternative", auth=JWTAuth())
+@admin_required
+def get_missing_data_pdf_segment_alternative(request, mid: str, year: int, pages: str):
+    """ Get PDF part for the missing data as markdown using alternative method """
+
+    try:
+        return JsonResponse(
+            fa.get_alt_markdown_from_pdf_segment(mid, year, pages),
+            safe=False,
+            status=200)
+    except FileNotFoundError as e:
+        return JsonResponse({
+            "success": False,
+            "error": str(e)
+        }, status=404)
+    except Exception as e:
+        print("Error getting markup for PDF.", str(e))
+        return JsonResponse({
+            "success": False,
+            "error": "Unable to retrieve PDF segment for the data point"
+        }, status=400)
+
 @admin_router.get("/missing-data/pdf-full", auth=JWTAuth())
 @admin_required
 @xframe_options_sameorigin
 def get_missing_data_pdf_full(request, mid: str, year: int, ):
-    """ Get PDF part for the missing data """
+    """ Get full PDF document """
 
     try:
         load_dotenv()
 
         # Get municipality info to build PDF path
         muni = Municipalities.objects.using(DatabaseName.MUNICIPAL_FINANCES).get(mid=mid)
-        fips = muni.county_fips
-        name = muni.name.lower().replace(' ', '_').title()
 
-        filename = f"acfr_{fips}_{name}_{year}.pdf"
-        pdf_path = Path(os.getenv("DOWNLOADS_DIR")) / filename
+        pdf_path = get_pdf_path(muni.county_fips, muni.name, year, directory=os.getenv("DOWNLOADS_DIR"))
 
         if not pdf_path.exists():
             return JsonResponse({"success": False, "error": "PDF not found"}, status=404)
@@ -84,7 +104,7 @@ def get_missing_data_pdf_full(request, mid: str, year: int, ):
         #    }, safe=False, status=200)
         #del response['X-Frame-Options']
         #return response
-        return FileResponse(open(pdf_path, 'rb'), filename=filename, as_attachment=False)
+        return FileResponse(open(pdf_path, 'rb'), filename=pdf_path.name, as_attachment=False)
     except Exception as e:
         print("Error getting markup for PDF.", str(e))
         return JsonResponse({ "success": False, "error": "Unable to retrieve full PDF"}, status=400)
