@@ -18,7 +18,6 @@ from .lib.calculation import (
     CalculationError,
     build_expression,
     evaluate_calculation,
-    numeric_or_none,
     parse_calc_token_string
 )
 from .lib.finance import (
@@ -166,19 +165,21 @@ def compare_state_municipalities(request, state_abbr:str, calc:str, year_mode:st
     else:
         shared_year = None
 
-    results: list[CompareResult] = []
-    for mid, records in finances_by_mid.items():
+    def select_record(records:list[dict]) -> dict | None:
+        """ Pick the finance record this mode evaluates against """
         if year_mode == "shared":
             if shared_year is None:
-                continue
-            year_records = [r for r in records if r['year'] == shared_year]
-            if not year_records:
-                continue
-            record = year_records[0]
-            year_used = shared_year
-        else:
-            record = records[-1]
-            year_used = record['year']
+                return None
+            matching = [r for r in records if r['year'] == shared_year]
+            return matching[0] if matching else None
+        return records[-1]
+
+    results: list[CompareResult] = []
+    for mid, records in finances_by_mid.items():
+        record = select_record(records)
+        if record is None:
+            continue
+        year_used = record['year']
 
         municipality_props = municipality_props_by_mid.get(mid, {})
 

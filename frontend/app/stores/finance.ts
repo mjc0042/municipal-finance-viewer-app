@@ -72,6 +72,10 @@ export const useFinanceStore = defineStore('finance', {
         .find(f => f.id === featureId) ?? null
 
       // Get finances for the municipality
+      await this.fetchMunicipalityFinances(mid)
+    },
+    async fetchMunicipalityFinances(mid: string) {
+      // Get (or reuse cached) finances for a municipality without any frame association
       if (!this.financesByMunicipality[mid]) {
         this.financesByMunicipality[mid] = await financialApi.getMunicipalityFinances(mid)
       }

@@ -54,9 +54,17 @@ const currentCalculation = ref<CalculationItem[]>([])
 const currentYearMode = ref<YearMode>('latest')
 const activeComparison = ref<CompareResult[]>([])
 const compareMessage = ref('')
-const compareMessageType = ref('success')
 const showCompareMessage = ref(false)
 const financesFieldsCache = ref<string[] | null>(null)
+
+const defaultBoundaryStyle = {
+  color: '#2c3e50',
+  weight: 1.5,
+  opacity: 1,
+  fillOpacity: 0.3
+}
+
+const toolbarButtonClass = 'p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative'
 
 const compareFieldList = computed(() => {
   const municipalBoundaries = selectedState.value
@@ -71,15 +79,14 @@ const compareFieldList = computed(() => {
 async function onOpenCompare() {
   if (!selectedState.value) return
 
-  // Derive finance field list from one municipality's finances, cached per session
+  // Derive finance field list from one municipality's finances, cached per session.
+  // Finances are held in the store's existing finances cache keyed by mid - no
+  // extra frame bookkeeping is written.
   if (!financesFieldsCache.value) {
     const municipalBoundaries = financeStore.getStateMunicipalBoundariesList(selectedState.value.code)
     const firstWithMid = municipalBoundaries.find(f => f.properties.mid)
     if (firstWithMid?.properties.mid) {
-      // Fetch (or reuse cached) finances for one municipality, then derive numeric fields
-      await financeStore.setSelectedMunicipality(
-        'compare-field-derivation', selectedState.value.code,
-        firstWithMid.id ?? -1, firstWithMid.properties.mid)
+      await financeStore.fetchMunicipalityFinances(firstWithMid.properties.mid)
       const finances = financeStore.getMunicipalFinancesByMid(firstWithMid.properties.mid)
       const fields = finances && finances.length > 0 ? getNumberFields(finances[0]) : null
       if (fields && fields.length > 0) {
@@ -99,7 +106,6 @@ async function onOpenCompare() {
 
 function showCompareError(msg: string) {
   compareMessage.value = msg
-  compareMessageType.value = 'error'
   showCompareMessage.value = true
   setTimeout(() => showCompareMessage.value = false, 10000)
 }
@@ -110,8 +116,20 @@ function calcToTokenString(calc: CalculationItem[]): string {
   ).join(',')
 }
 
-async function applyComparison(calc: CalculationItem[]) {
+async function applyComparison(calc: CalculationItem[] | null) {
   showCompareModal.value = false
+
+  if (calc === null) {
+    // Modal was cancelled without submitting - keep any active comparison as-is
+    return
+  }
+
+  if (calc === currentCalculation.value) {
+    // Modal cancel emits the loaded calculation by reference; a re-apply would
+    // be a redundant identical fetch, so treat it as a no-op
+    return
+  }
+
   currentCalculation.value = calc
 
   if (!calc || calc.length === 0 || !selectedState.value) {
@@ -138,12 +156,7 @@ function clearComparison() {
   activeComparison.value = []
   currentCalculation.value = []
   if (municipalLayer) {
-    municipalLayer.setStyle({
-      color: '#2c3e50',
-      weight: 1.5,
-      opacity: 1,
-      fillOpacity: 0.3
-    })
+    municipalLayer.setStyle(defaultBoundaryStyle)
     municipalLayer.eachLayer((layer: { unbindTooltip: () => void }) => {
       layer.unbindTooltip()
     })
@@ -170,12 +183,7 @@ function renderComparison() {
     const mid = feature?.properties?.mid
     const value = mid ? valueByMid.get(mid) : undefined
     if (value === undefined) {
-      return {
-        color: '#2c3e50',
-        weight: 1.5,
-        opacity: 1,
-        fillOpacity: 0.3
-      }
+      return defaultBoundaryStyle
     }
     return {
       color: 'transparent',
@@ -373,7 +381,7 @@ onUnmounted(() => {
                 :style="{ width: size.width + 'px', height: size.height + 'px' }"
                 ref="mapRef"
             />
-            <div v-if="showCompareMessage" :class="compareMessageType === 'error' ? 'text-red-500' : 'text-blue-500'" class="absolute top-10 right-4 p-2 text-sm bg-white shadow-lg shadow-neutral-500 border border-gray-300 rounded z-50">
+            <div v-if="showCompareMessage" class="text-red-500 absolute top-10 right-4 p-2 text-sm bg-white shadow-lg shadow-neutral-500 border border-gray-300 rounded z-50">
               {{ compareMessage }}
             </div>
 
@@ -384,21 +392,22 @@ onUnmounted(() => {
                 aria-label="Map frame options"
               >
                 <ToolbarButton
-                  class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
+                  :class="toolbarButtonClass"
                   @click="onOpenCompare"
                 >
                   Compare
                 </ToolbarButton>
                 <ToolbarButton v-if="activeComparison.length"
-                  class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
+                  :class="toolbarButtonClass"
+                  :title="'Clear comparison (Year mode: ' + currentYearMode + ')'"
                   @click="clearComparison"
                 >
                   Clear
                 </ToolbarButton>
-                <ToolbarSeparator v-if="activeComparison.length" class="w-px bg-neutral-400/65" />
-                <ToolbarButton v-if="activeComparison.length"
-                  class="p-4 font-semibold bg-white shrink-0 grow-0 basis-auto h-[25px] inline-flex text-md leading-none items-center justify-center outline-none cursor-pointer hover:bg-neutral-300/50 focus:relative"
-                  :title="'Year mode: ' + currentYearMode + ' (click to switch)'"
+                <ToolbarSeparator class="w-px bg-neutral-400/65" />
+                <ToolbarButton
+                  :class="toolbarButtonClass"
+                  :title="'Year mode: ' + currentYearMode + (currentCalculation.length ? ' (click to switch)' : ' (used for the next comparison)')"
                   @click="toggleYearMode"
                 >
                   Year: {{ currentYearMode === 'shared' ? 'shared' : 'latest' }}
@@ -411,7 +420,7 @@ onUnmounted(() => {
   <CalculationsModal v-if="showCompareModal"
     :datasets="compareFieldList"
     :loadedCalc="currentCalculation"
-    @close="(calc:CalculationItem[]) => applyComparison(calc)"
+    @close="(calc:CalculationItem[] | null) => applyComparison(calc)"
   />
 </template>
 

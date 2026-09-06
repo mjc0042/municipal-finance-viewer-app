@@ -300,4 +300,141 @@ describe('MapFrame compare', () => {
     expect(wrapper.text()).toContain('Invalid calculation token')
     wrapper.unmount()
   })
+
+  it('cancelling the modal does not re-apply the active comparison', async () => {
+    vi.mocked(financialApi.getMunicipalityFinances).mockResolvedValue([
+      { mid: 'mid-0', year: 2022, debt: 100, population: 50 } as any,
+    ])
+    vi.mocked(financialApi.compareStateMunicipalities).mockResolvedValue([
+      { mid: 'mid-0', value: 2, year: 2022 },
+    ])
+
+    const wrapper = await mountMapFrame()
+    await selectState()
+
+    const compareButton = wrapper.findAll('button').find(b => b.text() === 'Compare')!
+    await compareButton.trigger('click')
+    await flushPromises()
+
+    const modal = wrapper.findComponent({ name: 'FinanceCalculationsModal' })
+    modal.vm.$emit('close', [{ source: 'finances', field: 'debt' }])
+    await flushPromises()
+    expect(financialApi.compareStateMunicipalities).toHaveBeenCalledTimes(1)
+
+    // Reopen and cancel: the modal emits the loaded calculation unchanged
+    await wrapper.findAll('button').find(b => b.text() === 'Compare')!.trigger('click')
+    await flushPromises()
+    const modalAgain = wrapper.findComponent({ name: 'FinanceCalculationsModal' })
+    modalAgain.vm.$emit('close', modalAgain.props('loadedCalc'))
+    await flushPromises()
+
+    // No second fetch: cancel is a no-op
+    expect(financialApi.compareStateMunicipalities).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('button').some(b => b.text() === 'Clear')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('applies the comparison with the selected year mode', async () => {
+    vi.mocked(financialApi.getMunicipalityFinances).mockResolvedValue([
+      { mid: 'mid-0', year: 2022, debt: 100, population: 50 } as any,
+    ])
+    vi.mocked(financialApi.compareStateMunicipalities).mockResolvedValue([
+      { mid: 'mid-0', value: 2, year: 2022 },
+    ])
+
+    const wrapper = await mountMapFrame()
+    await selectState()
+
+    // Switch year mode BEFORE any comparison exists (shared must be choosable for a first apply)
+    const yearButton = wrapper.findAll('button').find(b => b.text().startsWith('Year:'))!
+    await yearButton.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Year: shared')
+    expect(financialApi.compareStateMunicipalities).not.toHaveBeenCalled()
+
+    const compareButton = wrapper.findAll('button').find(b => b.text() === 'Compare')!
+    await compareButton.trigger('click')
+    await flushPromises()
+
+    const modal = wrapper.findComponent({ name: 'FinanceCalculationsModal' })
+    modal.vm.$emit('close', [{ source: 'finances', field: 'debt' }])
+    await flushPromises()
+
+    expect(financialApi.compareStateMunicipalities).toHaveBeenCalledWith('MA', 'finances:debt', 'shared')
+    wrapper.unmount()
+  })
+
+  it('styles the choropleth and binds tooltips from the compare results', async () => {
+    vi.mocked(financialApi.getMunicipalityFinances).mockResolvedValue([
+      { mid: 'mid-0', year: 2022, debt: 100, population: 50 } as any,
+    ])
+    vi.mocked(financialApi.compareStateMunicipalities).mockResolvedValue([
+      { mid: 'mid-0', value: 2.345, year: 2022 },
+    ])
+
+    const { default: L } = await import('leaflet')
+    const wrapper = await mountMapFrame()
+    await selectState()
+
+    const compareButton = wrapper.findAll('button').find(b => b.text() === 'Compare')!
+    await compareButton.trigger('click')
+    await flushPromises()
+
+    const modal = wrapper.findComponent({ name: 'FinanceCalculationsModal' })
+    modal.vm.$emit('close', [{ source: 'finances', field: 'debt' }])
+    await flushPromises()
+
+    // The municipal layer's style function colors matched mids and leaves others default
+    const geoJSONMock = vi.mocked(L.geoJSON)
+    const municipalLayerStub = geoJSONMock.mock.results[geoJSONMock.mock.calls.length - 1]?.value
+    const styleFn = (municipalLayerStub as any).setStyle.mock.calls.at(-1)?.[0] as ((f?: any) => any) | undefined
+    expect(styleFn).toBeTruthy()
+    expect(styleFn!({ properties: { mid: 'mid-0' } })).toMatchObject({ fillColor: '#123456', fillOpacity: 0.85 })
+    expect(styleFn!({ properties: { mid: 'mid-1' } })).toMatchObject({ color: '#2c3e50', fillOpacity: 0.3 })
+
+    // Tooltips: Value for a result mid, No data for an omitted mid
+    const eachLayerCalls = (municipalLayerStub as any).eachLayer.mock.calls
+    expect(eachLayerCalls.length).toBeGreaterThan(0)
+    const layerFn = eachLayerCalls.at(-1)![0]
+    const bound: string[] = []
+    layerFn({ feature: { properties: { mid: 'mid-0' } }, bindTooltip: (t: string) => bound.push(t), unbindTooltip: () => {} })
+    layerFn({ feature: { properties: { mid: 'mid-2' } }, bindTooltip: (t: string) => bound.push(t), unbindTooltip: () => {} })
+    expect(bound).toEqual(['Value: 2.35', 'No data'])
+    wrapper.unmount()
+  })
+
+  it('clears the comparison when the selected state changes', async () => {
+    vi.mocked(financialApi.getMunicipalityFinances).mockResolvedValue([
+      { mid: 'mid-0', year: 2022, debt: 100, population: 50 } as any,
+    ])
+    vi.mocked(financialApi.compareStateMunicipalities).mockResolvedValue([
+      { mid: 'mid-0', value: 2, year: 2022 },
+    ])
+
+    const { useFinanceStore } = await import('~/stores/finance')
+    const wrapper = await mountMapFrame()
+    await selectState()
+
+    const compareButton = wrapper.findAll('button').find(b => b.text() === 'Compare')!
+    await compareButton.trigger('click')
+    await flushPromises()
+
+    const modal = wrapper.findComponent({ name: 'FinanceCalculationsModal' })
+    modal.vm.$emit('close', [{ source: 'finances', field: 'debt' }])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Clear')
+
+    // Select a different state through the same leaflet click path
+    vi.mocked(financialApi.getMunicipalBoundaries).mockResolvedValue({
+      type: 'FeatureCollection',
+      features: [municipalFeatureFixture(5, 'mid-5')],
+    } as any)
+    const financeStore = useFinanceStore()
+    await financeStore.setSelectedState('frame-1', 'Ohio', 'OH', '39')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Clear')
+    expect(wrapper.text()).toContain('Year: latest')
+    wrapper.unmount()
+  })
 })

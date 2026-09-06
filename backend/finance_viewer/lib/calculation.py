@@ -11,7 +11,7 @@ import ast
 import operator as op
 import re
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 _ALLOWED_BINOPS = {
     ast.Add: op.add,
@@ -135,19 +135,3 @@ def build_expression(items:list[tuple[str, str]], values:dict[str, dict[str, obj
             value = resolve_value(source, field, values)
             parts.append(repr(value))
     return ' '.join(parts)
-
-
-def numeric_or_none(value:object) -> float | None:
-    """ Coerce a raw record value to float, or None if not numeric
-
-    Args:
-        value (object): Raw value from a finance or boundary record
-    Returns:
-        (float | None): Numeric value or None
-    """
-    if isinstance(value, bool) or value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError, InvalidOperation):
-        return None

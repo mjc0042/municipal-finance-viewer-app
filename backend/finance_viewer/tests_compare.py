@@ -21,21 +21,6 @@ from finance_viewer.models.municipal_finance import Municipalities, MunicipalFin
 STATE_DB = 'municipal_finances'
 
 
-def _finance_row(mid: str, year: int, **overrides) -> dict:
-    row = {
-        'mid': mid,
-        'year': year,
-        'debt': Decimal('100.0'),
-        'population': Decimal('50.0'),
-        'total_revenues': Decimal('200.0'),
-        'police_force': 10,
-        'modifier': 'test',
-        'created_at': '2024-01-01T00:00:00Z',
-    }
-    row.update(overrides)
-    return row
-
-
 class CompareStateMunicipalitiesTests(TestCase):
     databases = {'default', 'municipal_finances', 'gis_boundaries'}
 
@@ -223,10 +208,13 @@ class CompareStateMunicipalitiesTests(TestCase):
         mid = self._seed_municipality('Springfield')
         self._seed_finance(mid, 2022)
 
-        # A token string that assembles into a call expression must never evaluate
-        response = self._compare(calc='finances:debt,+,municipality:pop_2020',
-                                 boundary_props={str(mid.mid): {'pop_2020': 20}})
+        # A token string whose fields would assemble into a call expression
+        # must never evaluate; the municipality is omitted, not exploited
+        response = self._compare(
+            calc='finances:__import__,finances:os',
+            boundary_props={str(mid.mid): {'pop_2020': 20}})
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content), [])
 
     def test_municipality_boundary_property_used(self):
         # pop_2020 resolves from the GIS boundary properties keyed by mid;
