@@ -93,19 +93,24 @@ calculation) restores the base map.
 
 ## Testing Decisions
 
-- **What makes a good test here**: assert external behavior only — HTTP request in, JSON out on the
-  backend; component rendered with mocked API, UI state and map styling out on the frontend. No
-  assertions against internal helpers, evaluator internals, or component internals.
-- **Backend (seam 1, primary)**: tests against the compare endpoint via the Django test client with
-  seeded municipality/finance rows, covering: a simple single-field calc, arithmetic and
-  parentheses, both Year Modes, omission of municipalities with no record, omission on division by
-  zero, malformed calc → 400, and authentication required.
-- **Frontend (seam 2)**: component tests for the Map Frame with the financial API client mocked at
-  its module boundary, covering: Compare button visibility rules, modal open/apply wiring,
-  choropleth styling and tooltips after a mocked result set, Clear behavior, and reset on state
-  change. Requires introducing a vitest setup (none exists today).
-- **Prior art**: none — the backend test module is an empty stub and no frontend tests exist. This
-  spec establishes the repo's first tests on both seams.
+- **No automated tests.** Backend tests were initially written (HTTP-seam tests against the compare
+  endpoint), then removed: they were run with bare pytest without pytest-django, so Django's
+  test-database isolation never activated and the tests operated on the live
+  `municipal_finance_viewer` database — destroying its contents. The test infrastructure
+  (backend test module and conftest, frontend vitest suite) has been removed entirely.
+- **Backend verification is manual**: the compare endpoint is exercised via authenticated requests
+  against the running dev server — token string parsing, both Year Modes, omission of
+  municipalities with no finance record, malformed calc → 400, and auth required.
+- **Frontend verification is manual**: the Compare flow is walked in the dev environment —
+  Compare button visibility, modal open/apply, choropleth rendering and tooltips, Clear, and
+  reset on state change.
+- **Risk accepted**: the restricted calculation evaluator (backend/finance_viewer/lib/calculation.py)
+  is the security-sensitive piece and now has no regression net. If it is ever refactored,
+  re-verify manually that only arithmetic, parentheses, and numeric constants evaluate, and that
+  calls/attribute access/names are rejected.
+- **Prior art**: none. Automated tests were removed by decision of the maintainer; any future
+  automated testing should use the dedicated `mfv_test` database (see `copy_tables.sh` at the
+  workspace root) and never the live aliases.
 
 ## Out of Scope
 
